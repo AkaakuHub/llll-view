@@ -1,0 +1,19 @@
+{
+  "name": "llll-view",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "concurrently \"pnpm run dev:backend\" \"pnpm run dev:frontend\"",
+    "dev:frontend": "cd frontend && pnpm run dev",
+    "dev:backend": "cd backend && pnpm run dev",
+    "build": "concurrently \"pnpm run build:frontend\" \"pnpm run build:backend\"",
+    "build:frontend": "cd frontend && pnpm run build",
+    "build:backend": "cd backend && pnpm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
