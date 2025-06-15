@@ -6,6 +6,12 @@ interface AssetStats {
   totalSize: number
   progress: string
   formattedSize: string
+  breakdown?: {
+    assetBundles: number
+    storyFiles: number
+    audioFiles: number
+    otherFiles: number
+  }
   error?: string
 }
 
@@ -100,6 +106,31 @@ const AssetStats = () => {
           {stats.downloaded > 0 && stats.totalExpected > 0 && (
             <div className="text-xs text-gray-500">
               Remaining: {(stats.totalExpected - stats.downloaded).toLocaleString()} files
+            </div>
+          )}
+
+          {/* Detailed Breakdown */}
+          {stats.breakdown && (
+            <div className="mt-4 pt-3 border-t border-gray-700">
+              <div className="text-xs text-gray-400 mb-2">File Type Breakdown:</div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Asset Bundles:</span>
+                  <span className="text-blue-400">{stats.breakdown.assetBundles.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Story Files:</span>
+                  <span className="text-green-400">{stats.breakdown.storyFiles.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Audio Files:</span>
+                  <span className="text-yellow-400">{stats.breakdown.audioFiles.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Other Files:</span>
+                  <span className="text-purple-400">{stats.breakdown.otherFiles.toLocaleString()}</span>
+                </div>
+              </div>
             </div>
           )}
         </div>

@@ -30,4 +30,19 @@ export class SometoolController {
       dbonly: dbonly === 'true',
     });
   }
+
+  @Get('acb/status')
+  async getAcbExtractorStatus() {
+    return await this.sometoolService.checkAcbExtractorStatus();
+  }
+
+  @Post('acb/extract')
+  async extractAcb(@Body() body: { filePath: string; outputDir?: string }) {
+    return await this.sometoolService.extractAcbFile(body.filePath, body.outputDir);
+  }
+
+  @Get('acb/list')
+  async listAcbFiles() {
+    return await this.sometoolService.listAcbFiles();
+  }
 }
