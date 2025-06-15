@@ -59,7 +59,7 @@ export class SometoolService {
 
   async buildSometool(): Promise<{ success: boolean; output: string; error?: string }> {
     try {
-      const command = `cd ${this.sometoolPath} && export PATH=$PATH:/usr/local/go/bin && go build .`;
+      const command = `cd ${this.sometoolPath} && go build .`;
       console.log('Building sometool:', command);
       const { stdout, stderr } = await execAsync(command);
       
