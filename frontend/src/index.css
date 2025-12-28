@@ -1,0 +1,193 @@
+@import "tailwindcss";
+
+/* Enable dark mode via class for Tailwind CSS v4 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+	/* note: use filter when want to brighten something */
+	/* Semantic color palette */
+	--color-kaho: #ffd166;
+	--color-saya: #609cf6;
+	--color-kozu: #55c080;
+	--color-tuzu: #ff6b7a;
+	--color-ruri: #ff8ac2;
+	--color-megu: #b4b4b4;
+	--color-gin: #70d4e1;
+	--color-suzu: #f5d36c;
+	--color-hime: #b7a9ff;
+	--color-sera: #ff8a7c;
+	--color-izu: #4fe3f0;
+	--color-paper: #ffffff;
+
+	--color-surface: #f7f5f2;
+	--color-text: #1f1b16;
+	--color-border: #e2ddd6;
+	--color-muted: #554f4a;
+}
+
+/* Dark mode overrides for semantic colors */
+.dark {
+	--color-kaho: #e09200;
+	--color-saya: #255faa;
+	--color-kozu: #2cac64;
+	--color-tuzu: #ac1827;
+	--color-ruri: #991a55;
+	--color-megu: #727272;
+	--color-gin: #05979c;
+	--color-suzu: #c99a00;
+	--color-hime: #7a68cd;
+	--color-sera: #872419;
+	--color-izu: #0f8ca2;
+	--color-paper: #ffffff;
+
+	--color-surface: #161514;
+	--color-text: #f5f1ec;
+	--color-border: #474747;
+	--color-muted: #b9b1a9;
+}
+
+/* note: use filter when want to brighten something */
+
+@font-face {
+	font-family: "Klee One";
+	src: url("/fonts/KleeOne-Regular.ttf") format("truetype");
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+/* Safari & Mobile viewport fix */
+:root {
+	--safe-area-inset-top: env(safe-area-inset-top, 0px);
+	--safe-area-inset-right: env(safe-area-inset-right, 0px);
+	--safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+	--safe-area-inset-left: env(safe-area-inset-left, 0px);
+}
+
+/* Mobile viewport units */
+.h-screen-safe {
+	height: 100dvh; /* Dynamic viewport height */
+}
+
+.min-h-screen-safe {
+	min-height: 100dvh;
+}
+
+/* Safe area utility classes */
+.pb-safe {
+	padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Player height accounting for queue header and iOS safe area */
+.h-player-queue-safe {
+	height: calc(100dvh - 60px - env(safe-area-inset-bottom, 0px));
+}
+
+.pt-safe {
+	padding-top: env(safe-area-inset-top, 0px);
+}
+
+.pl-safe {
+	padding-left: env(safe-area-inset-left, 0px);
+}
+
+.pr-safe {
+	padding-right: env(safe-area-inset-right, 0px);
+}
+
+.pb-mini-player-safe {
+	padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+}
+
+.pb-queue-safe {
+	padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+}
+
+/* 2025年風スムーズスクロール */
+html {
+	scroll-behavior: smooth;
+}
+
+/* カスタムスクロールバー */
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: rgba(156, 163, 175, 0.5);
+	border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: rgba(156, 163, 175, 0.8);
+}
+
+/* ダークモードでのスクロールバー */
+
+.hide-scrollbar {
+	-ms-overflow-style: none;
+	scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+	display: none;
+}
+.dark ::-webkit-scrollbar-thumb {
+	background: rgba(75, 85, 99, 0.5);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+	background: rgba(75, 85, 99, 0.8);
+}
+
+/* アニメーション遅延 */
+.animation-delay-200 {
+	animation-delay: 0.2s;
+}
+
+.animation-delay-400 {
+	animation-delay: 0.4s;
+}
+
+/* Custom scrollbar for lyrics display */
+.custom-scrollbar {
+	scrollbar-width: thin;
+	scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+	width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+	background-color: rgba(156, 163, 175, 0.5);
+	border-radius: 4px;
+	border: 2px solid transparent;
+	background-clip: content-box;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+	background-color: rgba(156, 163, 175, 0.8);
+}
+
+/* Dark mode custom scrollbar */
+.dark .custom-scrollbar {
+	scrollbar-color: rgba(75, 85, 99, 0.7) transparent;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+	background-color: rgba(75, 85, 99, 0.7);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+	background-color: rgba(75, 85, 99, 0.9);
+}

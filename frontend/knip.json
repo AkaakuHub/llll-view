@@ -1,0 +1,5 @@
+{
+  "entry": ["src/main.tsx"],
+  "ignore": ["**/node_modules/**", "**/dist/**"],
+  "ignoreDependencies": ["tailwindcss"]
+}

@@ -1,0 +1,299 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum ConversionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum JobType {
+  SINGLE_FILE
+  BATCH_CONVERSION
+}
+
+enum AudioCategory {
+  BGM
+  VOICE
+  SE
+}
+
+model audioFiles {
+  id                     String          @id
+  filename               String          @unique
+  displayName            String?
+  category               AudioCategory   @default(BGM)
+  sampleRate             Int?
+  channels               Int?
+  duration               Float?
+  bitrate                Int?
+  encoding               String?
+  musicId                Int
+  orderId                Int
+  title                  String
+  titleFurigana          String
+  jacketId               Int
+  soundId                Int
+  description            String
+  generationsId          Int
+  unitId                 Int
+  centerCharacterId      Int
+  singerCharacterId      String
+  supportCharacterId     String
+  musicType              Int
+  experienceType         Int
+  beatPointCoefficient   Int
+  apIncrement            Int
+  songTime               Int
+  playTime               Int
+  feverSectionNo         Int
+  previewStartTime       Int
+  previewEndTime         Int
+  previewFadeInTime      Int
+  previewFadeOutTime     Int
+  releaseConditionType   Int
+  releaseConditionDetail Int
+  releaseConditionText   String
+  startTime              DateTime
+  endTime                DateTime
+  maxAp                  Int
+  isVideoMode            Int
+  videoBgId              Int
+  songType               Int
+  musicScoreReleaseTime  DateTime
+  sourcePath             String
+  outputPath             String?
+  thumbnailPath          String?
+  status                 ConversionStatus @default(PENDING)
+  streamCount            Int?
+  isLiked                Boolean         @default(false)
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  convertedAt            DateTime?
+  audioStreams          audioStreams[]
+
+  @@map("audio_files")
+}
+
+model audioStreams {
+  id          String      @id
+  audioFileId String
+  streamIndex Int
+  name        String?
+  duration    Float?
+  sampleRate  Int?
+  channels    Int?
+  outputPath  String?
+  status      ConversionStatus @default(PENDING)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime
+  convertedAt DateTime?
+  audioFiles audioFiles @relation(fields: [audioFileId], references: [id], onDelete: Cascade)
+
+  @@unique([audioFileId, streamIndex])
+  @@map("audio_streams")
+}
+
+model conversionJobs {
+  id             String    @id
+  type           JobType   @default(SINGLE_FILE)
+  status         JobStatus @default(PENDING)
+  sourcePath     String
+  targetPath     String
+  options        String?
+  totalFiles     Int       @default(0)
+  processedFiles Int       @default(0)
+  failedFiles    Int       @default(0)
+  logs           String?
+  errorMessage   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime
+  startedAt      DateTime?
+  completedAt    DateTime?
+
+  @@map("conversion_jobs")
+}
+
+model characters {
+  id                     Int      @id
+  nameLast               String
+  nameFirst              String
+  latinAlphabetNameLast  String?
+  latinAlphabetNameFirst String?
+  generationsId          Int
+  characterVoice         String?
+  themeColor             String?
+  introduction           String?
+  styleType              Int      @default(1)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  cards cardIllustrations[]
+}
+
+model cardIllustrations {
+  id               Int      @id
+  cardSeriesId     Int
+  characterId      Int
+  name             String?
+  description      String?
+  rarity           Int      @default(1)
+  evolveTimes      Int      @default(0)
+  style            Int      @default(1)
+  mood             Int      @default(1)
+  initialSmile     Int?
+  initialPure      Int?
+  initialCool      Int?
+  initialMental    Int?
+  maxSmile         Int?
+  maxPure          Int?
+  maxCool          Int?
+  maxMental        Int?
+  beatPoint        Int?
+  orderId          Int?
+  fullImagePath    String?
+  middleImagePath  String?
+  profileImagePath String?
+  homeVideoPath    String?
+  hasFullImage     Boolean  @default(false)
+  hasMiddleImage   Boolean  @default(false)
+  hasProfileImage  Boolean  @default(false)
+  hasHomeVideo     Boolean  @default(false)
+  extractedAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  character characters @relation(fields: [characterId], references: [id])
+
+  @@index([characterId])
+  @@index([rarity])
+  @@index([style])
+  @@index([mood])
+  @@index([cardSeriesId])
+  @@map("card_illustrations")
+}
+
+model cardSkills {
+  id                    String           @id
+  cardSkillSeriesId     String
+  skillLevel            Int
+  skillCost             Int?
+  apperanceType         String?
+  cardSkillEffectId     String?
+  description           String?
+  cardSeriesId          Int?
+
+  @@index([cardSkillSeriesId])
+  @@index([cardSeriesId])
+  @@map("card_skills")
+}
+
+model StoryDialogueIndex {
+  id              String   @id @default(uuid())
+  storyId         Int
+  scriptId        Int
+  dialogueIndex   Int
+  text            String
+  voiceFile       String?
+  sourceFileMtime BigInt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([text])
+  @@index([scriptId, dialogueIndex])
+  @@index([sourceFileMtime])
+  @@map("story_dialogue_index")
+}
+
+model cardLevels {
+  id                    Int              @id
+  experienceType        Int
+  cardLevel             Int
+  experience            Int
+  cumulativeExperience  Int
+
+  @@index([experienceType])
+  @@index([cardLevel])
+  @@map("card_levels")
+}
+
+model centerSkills {
+  id                    Int              @id
+  centerSkillSeriesId   Int
+  skillLevel            Int
+  description           String?
+  centerSkillEffectId   String?
+
+  @@index([centerSkillSeriesId])
+  @@map("center_skills")
+}
+
+model musicScores {
+  id                    Int              @id
+  normalLevel           Int?
+  hardLevel             Int?
+  expertLevel           Int?
+  masterLevel           Int?
+  normalMaxCombo        Int?
+  hardMaxCombo          Int?
+  expertMaxCombo        Int?
+  masterMaxCombo        Int?
+  shouldVerifyNotesCount Int?
+  scoreRewardSeriesId   Int?
+  normalGainMusicExp    Int?
+  hardGainMusicExp      Int?
+  expertGainMusicExp    Int?
+  masterGainMusicExp    Int?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  @@index([scoreRewardSeriesId])
+  @@map("music_scores")
+}
+
+model liveTimelines {
+  id                    String           @id
+  label                 String?
+  musicId               Int?
+  locationsId           Int?
+  freeId                Int?
+  nextId                Int?
+  movieIds              String?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  @@index([musicId])
+  @@index([locationsId])
+  @@map("live_timelines")
+}
+
+model systemControlJobs {
+  id            String   @id @default(cuid())
+  command       String   // "Full Synchronization", "Database Only"など
+  options       String?  // JSON形式でオプションを保存
+  status        String   @default("pending") // "pending", "running", "completed", "failed", "cancelled"
+  processId     Int?     // sometoolプロセスID（最重要！）
+  outputLog     String?  // 累積出力ログ
+  errorMessage  String?
+  createdAt     DateTime @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+
+  @@map("system_control_jobs")
+}

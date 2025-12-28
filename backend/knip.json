@@ -1,0 +1,6 @@
+{
+  "entry": ["src/main.ts"],
+  "ignore": ["**/node_modules/**", "**/dist/**"],
+  "ignoreDependencies": ["@prisma/client", "swagger-ui-express", "@types/glob", "@nestjs/schematics"],
+  "ignoreBinaries": ["sleep", "lsof"]
+}

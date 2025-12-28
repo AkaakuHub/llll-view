@@ -1,0 +1,16 @@
+{
+  "name": "llll-view",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter backend run start:dev\" \"pnpm --filter frontend run dev\"",
+    "build": "concurrently \"pnpm --filter backend run build\" \"pnpm --filter frontend run build\"",
+    "backup": "bash ../llll-tools/backup-db.sh",
+    "postinstall": "lefthook install"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
+    "concurrently": "^8.2.2",
+    "lefthook": "^1.11.14"
+  }
+}

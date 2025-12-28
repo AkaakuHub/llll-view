@@ -1,0 +1,11 @@
+packages:
+  - frontend
+  - backend
+
+onlyBuiltDependencies:
+  - '@nestjs/core'
+  - '@prisma/client'
+  - '@prisma/engines'
+  - prisma
+  - puppeteer
+  - sharp

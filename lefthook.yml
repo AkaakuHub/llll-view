@@ -1,0 +1,45 @@
+pre-commit:
+  parallel: true
+  commands:
+    frontend-check:
+      glob: "frontend/**/*.{js,ts,jsx,tsx,json}"
+      run: cd frontend && pnpm check
+      stage_fixed: true
+
+    frontend-knip:
+      glob: "frontend/**/*.{js,ts,jsx,tsx,json}"
+      run: cd frontend && pnpm knip
+      stage_fixed: true
+
+    frontend-typecheck:
+      glob: "frontend/**/*.{ts,tsx}"
+      run: cd frontend && pnpm typecheck
+      stage_fixed: true
+
+    tailwind-colors-check-front:
+      glob: "frontend/**/*.{js,ts,jsx,tsx,json}"
+      run: python3 frontend/scripts/check-tailwind-colors.py frontend/src --css-file frontend/src/index.css
+      stage_fixed: true
+      skip:
+        - merge
+        - rebase
+
+    backend-check:
+      glob: "backend/**/*.{js,ts,json}"
+      run: cd backend && pnpm check
+      stage_fixed: true
+
+    backend-knip:
+      glob: "backend/**/*.{js,ts,json}"
+      run: cd backend && pnpm knip
+      stage_fixed: true
+
+    backend-typecheck:
+      glob: "backend/**/*.{ts}"
+      run: cd backend && pnpm typecheck
+      stage_fixed: true
+
+commit-msg:
+  commands:
+    lint-commit-msg:
+      run: pnpm commitlint --edit {1}

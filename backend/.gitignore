@@ -1,0 +1,67 @@
+# Dependencies
+node_modules/
+.pnpm-store
+
+# Build outputs
+dist/
+build/
+tmp/
+
+# Environment files
+.env*
+!.env.example
+
+# Generated files (Prisma + NestJS)
+generated/
+.prisma/
+
+# Database files (SQLite)
+*.db
+dev.db
+*tmp.db
+
+# Logs
+*.log
+yarn-error.log
+pnpm-debug.log
+.pnpm-debug.log
+
+# IDE files
+.vscode/*
+!.vscode/launch.json.default
+!.vscode/extensions.json
+.idea/
+
+# OS files
+.DS_Store
+
+# TypeScript
+*.tsbuildinfo
+
+# Testing & Coverage
+coverage
+junit.xml
+
+# Prisma engines (avoid platform-specific issues)
+query-engine*
+migration-engine*
+schema-engine*
+libquery_engine*
+libquery-engine*
+query_engine-windows.dll.node
+
+# Misc
+.eslintcache
+.attest
+.envrc.local
+package.copy.json
+*.tgz
+/output.txt
+esm
+/target
+declaration
+
+*.pid
+
+
+dev.db-journal
