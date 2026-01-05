@@ -54,7 +54,7 @@ export default function AudioConverter() {
 	const [converting, setConverting] = useState(false);
 	const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
 	const [selectedStatus, setSelectedStatus] = useState<string>("ALL");
-	const [searchQuery, setSearchQuery] = useState<string>("");
+	const [searchQuery, setSearchQuery] = useState<string>("bgm_live_");
 	const [stats, setStats] = useState<ConversionStats | null>(null);
 	const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
 	const [activeConversions, setActiveConversions] = useState<string[]>([]);
@@ -588,6 +588,18 @@ export default function AudioConverter() {
 												</div>
 											</Button>
 											<div className="flex flex-wrap items-center gap-4 sm:justify-end">
+												<Button
+													onClick={(event) => {
+														event.stopPropagation();
+														resetAudioFile(file.id);
+													}}
+													tone="suzu"
+													size="sm"
+													className="font-medium"
+													title="この楽曲を未変換状態にリセット"
+												>
+													Reset
+												</Button>
 												<span
 													className={`font-medium ${getStatusColor(file.status)}`}
 												>
@@ -642,54 +654,18 @@ export default function AudioConverter() {
 										{/* Expanded Details */}
 										{expandedFiles.has(file.id) && (
 											<div className="mt-2 flex-1 overflow-y-auto pl-6">
-												<div className="flex flex-col gap-2 pb-2">
-													<div className="flex justify-end">
-														<Button
-															onClick={(event) => {
-																event.stopPropagation();
-																resetAudioFile(file.id);
-															}}
-															variant="soft"
-															tone="megu"
-															size="sm"
-															className="text-xs font-medium"
-															title="この楽曲を未変換状態にリセット"
-														>
-															Reset
-														</Button>
-													</div>
-													<div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-text">
-														<div>
-															<span className="text-muted">Sample Rate:</span>{" "}
-															{file.sampleRate || "N/A"}Hz
-														</div>
-														<div>
-															<span className="text-muted">Channels:</span>{" "}
-															{file.channels || "N/A"}
-														</div>
-														<div>
-															<span className="text-muted">Duration:</span>{" "}
-															{file.duration
-																? `${file.duration.toFixed(2)}s`
-																: "N/A"}
-														</div>
-														<div>
-															<span className="text-muted">Encoding:</span>{" "}
-															{file.encoding || "N/A"}
-														</div>
-													</div>
-
+												<div className="flex flex-col gap-2">
 													{/* Stream Details */}
 													{file.audioStreams.length > 0 && (
-														<div className="mt-3">
-															<h4 className="font-medium mb-2 text-text">
+														<div>
+															<div className="font-medium mb-2 text-text text-xs">
 																Streams ({file.audioStreams.length})
-															</h4>
+															</div>
 															<div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
 																{file.audioStreams.map((stream) => (
 																	<div
 																		key={stream.id}
-																		className="flex items-center justify-between bg-border p-2 rounded border border-border"
+																		className="flex items-center justify-between bg-border p-0.5 rounded border border-border"
 																	>
 																		<span className="text-sm text-text">
 																			Stream {stream.streamIndex}
