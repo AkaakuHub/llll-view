@@ -41,4 +41,16 @@ export class AppController {
 			};
 		}
 	}
+
+	@Get("time")
+	async getServerTime() {
+		const now = new Date();
+		const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+		const offsetMinutes = -now.getTimezoneOffset();
+		return {
+			serverTimeIso: now.toISOString(),
+			timezone,
+			utcOffsetMinutes: offsetMinutes,
+		};
+	}
 }

@@ -7,6 +7,8 @@ import { Injectable } from "@nestjs/common";
 import { GlobalConfigService } from "../config/global-config.service";
 import { AppLoggerService } from "../logger/logger.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { SometoolNotificationService } from "./notification.service";
+import { SometoolSettingsService } from "./settings.service";
 
 const execAsync = promisify(exec);
 
@@ -23,6 +25,8 @@ export class SometoolService {
 		private prisma: PrismaService,
 		private globalConfig: GlobalConfigService,
 		private appLoggerService: AppLoggerService,
+		private notificationService: SometoolNotificationService,
+		private settingsService: SometoolSettingsService,
 	) {
 		this.logger = this.appLoggerService.createLogger(SometoolService.name);
 		this.sometoolPath = path.resolve(this.globalConfig.getSometoolDirPath());
@@ -295,7 +299,19 @@ export class SometoolService {
 			master?: boolean;
 		} = {},
 		onData?: (chunk: string) => void,
+		meta?: {
+			scheduleId?: string;
+			maxRuntimeSeconds?: number;
+		},
 	): Promise<{ jobId: string; success: boolean; error?: string }> {
+		if (await this.isAnyJobRunning()) {
+			return {
+				jobId: "",
+				success: false,
+				error: "Another job is already running",
+			};
+		}
+
 		const jobId = randomUUID();
 		const commandName = this.getCommandName(options);
 
@@ -306,8 +322,15 @@ export class SometoolService {
 				command: commandName,
 				options: JSON.stringify(options),
 				status: "pending",
+				scheduleId: meta?.scheduleId,
 			},
 		});
+
+		const maxRuntimeMs = meta?.maxRuntimeSeconds
+			? meta.maxRuntimeSeconds * 1000
+			: null;
+		let timeoutHandle: NodeJS.Timeout | null = null;
+		let timedOut = false;
 
 		try {
 			const sometoolBinary = this.sometoolBinaryPath;
@@ -328,11 +351,38 @@ export class SometoolService {
 					startedAt: new Date(),
 				},
 			});
+			await this.updateScheduleOnStart(meta?.scheduleId, jobId);
 
 			const child = spawn(sometoolBinary, args, {
 				cwd: this.sometoolPath,
 				stdio: ["pipe", "pipe", "pipe"],
 			});
+
+			if (maxRuntimeMs) {
+				timeoutHandle = setTimeout(async () => {
+					timedOut = true;
+					this.logger.warn(
+						`Job ${jobId} exceeded max runtime (${meta?.maxRuntimeSeconds}s), terminating.`,
+					);
+					child.kill();
+					await this.prisma.systemControlJobs.update({
+						where: { id: jobId },
+						data: {
+							status: "failed",
+							errorMessage: "Job exceeded maximum runtime",
+							completedAt: new Date(),
+						},
+					});
+					this.cleanupJobLog(jobId);
+					this.activeJobs.delete(jobId);
+					await this.updateScheduleOnCompletion(
+						meta?.scheduleId,
+						jobId,
+						"failed",
+					);
+					await this.notifyJobCompletion(jobId, "failed");
+				}, maxRuntimeMs);
+			}
 
 			// PIDを保存
 			await this.prisma.systemControlJobs.update({
@@ -366,9 +416,14 @@ export class SometoolService {
 			});
 
 			child.on("error", async (error) => {
+				if (timedOut) return;
 				this.logger.error(
 					`[ERROR] Process error for job ${jobId}: ${error.message}`,
 				);
+
+				if (timeoutHandle) {
+					clearTimeout(timeoutHandle);
+				}
 
 				// エラー時にも最終ログを保存
 				await this.saveJobLogOnCompletion(jobId);
@@ -385,10 +440,22 @@ export class SometoolService {
 				// クリーンアップ
 				this.cleanupJobLog(jobId);
 				this.activeJobs.delete(jobId);
+
+				await this.updateScheduleOnCompletion(
+					meta?.scheduleId,
+					jobId,
+					"failed",
+				);
+				await this.notifyJobCompletion(jobId, "failed");
 			});
 
 			child.on("close", async (code) => {
+				if (timedOut) return;
 				const finalStatus = code === 0 ? "completed" : "failed";
+
+				if (timeoutHandle) {
+					clearTimeout(timeoutHandle);
+				}
 
 				// ジョブ完了時に最終ログを保存
 				await this.saveJobLogOnCompletion(jobId);
@@ -400,11 +467,20 @@ export class SometoolService {
 						completedAt: new Date(),
 					},
 				});
+				await this.updateScheduleOnCompletion(
+					meta?.scheduleId,
+					jobId,
+					finalStatus,
+				);
 
 				// クリーンアップ
 				this.cleanupJobLog(jobId);
 				this.activeJobs.delete(jobId);
+
+				await this.notifyJobCompletion(jobId, finalStatus);
 			});
+
+			await this.notifyJobStart(jobId);
 
 			return { jobId, success: true };
 		} catch (error) {
@@ -427,6 +503,8 @@ export class SometoolService {
 
 			// クリーンアップ
 			this.cleanupJobLog(jobId);
+			await this.updateScheduleOnCompletion(meta?.scheduleId, jobId, "failed");
+			await this.notifyJobCompletion(jobId, "failed");
 
 			return {
 				jobId,
@@ -434,6 +512,13 @@ export class SometoolService {
 				error: error instanceof Error ? error.message : "Unknown error",
 			};
 		}
+	}
+
+	async isAnyJobRunning(): Promise<boolean> {
+		const running = await this.prisma.systemControlJobs.count({
+			where: { status: "running" },
+		});
+		return running > 0;
 	}
 
 	async getActiveJobs() {
@@ -693,5 +778,137 @@ export class SometoolService {
 		if (options.keepraw && options.dbonly) return "DB + Keep Raw";
 		if (options.keepraw && options.force) return "Force + Keep Raw";
 		return "Full Synchronization";
+	}
+
+	private async notifyJobStart(jobId: string): Promise<void> {
+		const settings = await this.settingsService.getNotificationSettings();
+		if (settings.notifyOnlyUpdates) {
+			return;
+		}
+		const payload = await this.buildNotificationPayload(
+			jobId,
+			"started",
+			settings,
+		);
+		if (payload) {
+			await this.notificationService.sendMessage(payload);
+		}
+	}
+
+	private async notifyJobCompletion(
+		jobId: string,
+		status: "completed" | "failed",
+	): Promise<void> {
+		const settings = await this.settingsService.getNotificationSettings();
+		if (status === "failed" && !settings.notifyOnFailure) return;
+		if (status === "completed" && settings.notifyOnlyUpdates) {
+			const job = await this.prisma.systemControlJobs.findUnique({
+				where: { id: jobId },
+				select: { outputLog: true },
+			});
+			if (this.shouldSkipCompletedNotification(job?.outputLog || null)) {
+				return;
+			}
+		}
+
+		const payload = await this.buildNotificationPayload(
+			jobId,
+			status,
+			settings,
+		);
+		if (payload) {
+			await this.notificationService.sendMessage(payload);
+		}
+	}
+
+	private async buildNotificationPayload(
+		jobId: string,
+		status: "started" | "completed" | "failed",
+		settings: { includeLog: boolean },
+	): Promise<string | null> {
+		const job = await this.prisma.systemControlJobs.findUnique({
+			where: { id: jobId },
+		});
+		if (!job) return null;
+
+		const now = new Date();
+		const formattedTime = this.formatServerTime(now);
+		const header = [`🔔 LLLL: ${status.toUpperCase()} (${formattedTime})`];
+
+		const error = job.errorMessage ? `Error: ${job.errorMessage}` : null;
+		const timing =
+			job.startedAt && job.completedAt
+				? `Duration: ${Math.round(
+						(job.completedAt.getTime() - job.startedAt.getTime()) / 1000,
+					)}s`
+				: null;
+
+		const logSnippet =
+			settings.includeLog && job.outputLog
+				? `Log:\n${job.outputLog.slice(-1500)}`
+				: null;
+
+		return [header.join("\n"), timing, error, logSnippet]
+			.filter(Boolean)
+			.join("\n");
+	}
+
+	private formatServerTime(date: Date): string {
+		const month = date.getMonth() + 1;
+		const day = date.getDate();
+		const hours = String(date.getHours()).padStart(2, "0");
+		const minutes = String(date.getMinutes()).padStart(2, "0");
+		const seconds = String(date.getSeconds()).padStart(2, "0");
+		return `${month}/${day} ${hours}:${minutes}:${seconds}`;
+	}
+
+	private shouldSkipCompletedNotification(outputLog: string | null): boolean {
+		if (!outputLog) return false;
+		const trimmed = outputLog.trimEnd();
+		return trimmed.endsWith(
+			"[Info] Nothing updated, will be stopping process.",
+		);
+	}
+
+	private async updateScheduleOnStart(
+		scheduleId: string | undefined,
+		jobId: string,
+	): Promise<void> {
+		if (!scheduleId) return;
+		try {
+			await this.prisma.systemControlSchedules.update({
+				where: { id: scheduleId },
+				data: {
+					lastRunAt: new Date(),
+					lastStatus: "running",
+					lastJobId: jobId,
+				},
+			});
+		} catch (error) {
+			this.logger.warn(
+				`Failed to update schedule ${scheduleId} on start: ${error}`,
+			);
+		}
+	}
+
+	private async updateScheduleOnCompletion(
+		scheduleId: string | undefined,
+		jobId: string,
+		status: string,
+	): Promise<void> {
+		if (!scheduleId) return;
+		try {
+			await this.prisma.systemControlSchedules.update({
+				where: { id: scheduleId },
+				data: {
+					lastStatus: status,
+					lastJobId: jobId,
+				},
+			});
+		} catch (error) {
+			this.logger.warn(
+				`Failed to update schedule ${scheduleId} on completion: ${error}`,
+			);
+		}
 	}
 }
