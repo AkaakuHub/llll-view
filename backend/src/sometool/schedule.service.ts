@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from "@nestjs/common";
+import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { CronJob, CronTime } from "cron";
 import { AppLoggerService } from "../logger/logger.service";
@@ -16,7 +16,7 @@ type ScheduleInput = {
 };
 
 @Injectable()
-export class SometoolScheduleService implements OnModuleInit {
+export class SometoolScheduleService implements OnModuleInit, OnModuleDestroy {
 	private readonly logger;
 
 	constructor(
@@ -37,6 +37,13 @@ export class SometoolScheduleService implements OnModuleInit {
 			this.logger.warn(
 				`Schedule refresh skipped (migration not applied yet): ${error}`,
 			);
+		}
+	}
+
+	async onModuleDestroy(): Promise<void> {
+		const jobKeys = Array.from(this.schedulerRegistry.getCronJobs().keys());
+		for (const jobKey of jobKeys) {
+			this.removeScheduleJob(jobKey);
 		}
 	}
 

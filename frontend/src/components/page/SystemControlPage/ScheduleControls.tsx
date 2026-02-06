@@ -200,6 +200,10 @@ const ScheduleControls = () => {
 
 	const handleSaveSchedule = async (form: ScheduleFormState) => {
 		const parsedMaxRuntime = Number.parseInt(form.maxRuntimeMinutes, 10);
+		if (Number.isNaN(parsedMaxRuntime)) {
+			console.error("Max Runtime is invalid.");
+			return;
+		}
 		const maxRuntimeSeconds =
 			Number.isNaN(parsedMaxRuntime) || parsedMaxRuntime === -1
 				? null
@@ -418,15 +422,52 @@ const ScheduleEditor = ({
 		buildFormState(schedule ?? null, fallbackTimezone),
 	);
 	const [saving, setSaving] = useState(false);
+	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
 	useEffect(() => {
 		setForm(buildFormState(schedule ?? null, fallbackTimezone));
 	}, [schedule, fallbackTimezone]);
 
 	const handleSave = async () => {
+		const trimmedName = form.name.trim();
+		if (!trimmedName) {
+			setErrorMessage("Name is required.");
+			return;
+		}
+		if (!/^\d{2}:\d{2}$/.test(form.timeOfDay)) {
+			setErrorMessage("Time must be in HH:mm format.");
+			return;
+		}
+		const trimmedTimezone = form.timezone.trim();
+		if (!trimmedTimezone) {
+			setErrorMessage("Timezone is required.");
+			return;
+		}
+		if (!/^-?\d+$/.test(form.maxRuntimeMinutes)) {
+			setErrorMessage("Max Runtime must be a number (use -1 for no limit).");
+			return;
+		}
+		if (
+			timezoneOptions.length > 0 &&
+			!timezoneOptions.includes(trimmedTimezone)
+		) {
+			setErrorMessage("Timezone must be a valid IANA timezone.");
+			return;
+		}
+		const runtimeValue = Number.parseInt(form.maxRuntimeMinutes, 10);
+		if (runtimeValue < -1) {
+			setErrorMessage("Max Runtime must be -1 or a positive number.");
+			return;
+		}
+
+		setErrorMessage(null);
 		setSaving(true);
 		try {
-			await onSave(form);
+			await onSave({
+				...form,
+				name: trimmedName,
+				timezone: trimmedTimezone,
+			});
 			if (mode === "new") {
 				setForm(buildFormState(null, fallbackTimezone));
 			}
@@ -582,6 +623,11 @@ const ScheduleEditor = ({
 								maxRuntimeMinutes: event.target.value,
 							}))
 						}
+						onBlur={() => {
+							if (form.maxRuntimeMinutes.trim() === "") {
+								setForm((prev) => ({ ...prev, maxRuntimeMinutes: "-1" }));
+							}
+						}}
 						placeholder="-1 for no limit"
 						className="cursor-pointer"
 					/>
@@ -640,6 +686,9 @@ const ScheduleEditor = ({
 				>
 					{mode === "new" ? "Add Schedule" : "Save Changes"}
 				</Button>
+				{errorMessage && (
+					<div className="text-xs text-tuzu">{errorMessage}</div>
+				)}
 				{mode === "existing" && schedule && onRunNow && (
 					<Button
 						onClick={() => onRunNow(schedule.id)}

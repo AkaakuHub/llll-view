@@ -1,5 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Post } from "@nestjs/common";
+import {
+	Body,
+	Controller,
+	Delete,
+	Get,
+	Param,
+	Post,
+	UsePipes,
+	ValidationPipe,
+} from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { UpsertScheduleDto } from "./dto/schedule.dto";
 import { SometoolScheduleService } from "./schedule.service";
 
 @ApiTags("sometool")
@@ -31,18 +41,8 @@ export class SometoolScheduleController {
 		},
 	})
 	@ApiResponse({ status: 200, description: "Schedule saved" })
-	async upsertSchedule(
-		@Body()
-		body: {
-			id?: string;
-			name: string;
-			enabled: boolean;
-			timeOfDay: string;
-			timezone: string;
-			options?: Record<string, boolean>;
-			maxRuntimeSeconds?: number | null;
-		},
-	) {
+	@UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+	async upsertSchedule(@Body() body: UpsertScheduleDto) {
 		return await this.scheduleService.upsertSchedule(body);
 	}
 
