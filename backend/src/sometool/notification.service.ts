@@ -3,6 +3,8 @@ import { AppLoggerService } from "../logger/logger.service";
 
 const MAX_DISCORD_MESSAGE_LENGTH = 2000;
 const SAFE_CHUNK_LENGTH = 1900;
+const CHUNK_DELAY_MS = 1200;
+const RETRY_DELAY_MS = 1500;
 
 @Injectable()
 export class SometoolNotificationService {
@@ -30,11 +32,23 @@ export class SometoolNotificationService {
 		const chunks = this.chunkMessage(content);
 		for (const chunk of chunks) {
 			try {
-				const response = await fetch(webhookUrl, {
+				let response = await fetch(webhookUrl, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({ content: chunk }),
 				});
+				if (response.status === 429) {
+					const retryAfter = response.headers.get("retry-after");
+					const delayMs = retryAfter
+						? Math.max(0, Number.parseFloat(retryAfter) * 1000)
+						: RETRY_DELAY_MS;
+					await this.delay(delayMs);
+					response = await fetch(webhookUrl, {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ content: chunk }),
+					});
+				}
 				if (!response.ok) {
 					this.logger.error(
 						`Discord webhook responded with ${response.status}`,
@@ -47,6 +61,7 @@ export class SometoolNotificationService {
 					}`,
 				);
 			}
+			await this.delay(CHUNK_DELAY_MS);
 		}
 	}
 
@@ -65,5 +80,9 @@ export class SometoolNotificationService {
 		}
 
 		return chunks;
+	}
+
+	private async delay(ms: number): Promise<void> {
+		return new Promise((resolve) => setTimeout(resolve, ms));
 	}
 }

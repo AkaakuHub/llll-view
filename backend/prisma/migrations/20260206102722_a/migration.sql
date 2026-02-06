@@ -2,7 +2,7 @@
 PRAGMA defer_foreign_keys=ON;
 PRAGMA foreign_keys=OFF;
 CREATE TABLE "new_system_control_settings" (
-    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT DEFAULT 1,
+    "id" INTEGER NOT NULL PRIMARY KEY DEFAULT 1,
     "notifyOnSuccess" BOOLEAN NOT NULL DEFAULT true,
     "notifyOnlyUpdates" BOOLEAN NOT NULL DEFAULT true,
     "notifyOnFailure" BOOLEAN NOT NULL DEFAULT true,

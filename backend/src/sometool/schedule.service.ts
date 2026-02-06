@@ -58,7 +58,7 @@ export class SometoolScheduleService implements OnModuleInit, OnModuleDestroy {
 		}
 
 		for (const schedule of schedules) {
-			this.registerSchedule(schedule.id);
+			await this.registerSchedule(schedule.id);
 		}
 	}
 
@@ -89,7 +89,7 @@ export class SometoolScheduleService implements OnModuleInit, OnModuleDestroy {
 				})
 			: await this.prisma.systemControlSchedules.create({ data: payload });
 
-		this.registerSchedule(schedule.id);
+		await this.registerSchedule(schedule.id);
 		return this.serializeSchedule(schedule);
 	}
 
@@ -99,7 +99,7 @@ export class SometoolScheduleService implements OnModuleInit, OnModuleDestroy {
 			data: { enabled },
 		});
 
-		this.registerSchedule(schedule.id);
+		await this.registerSchedule(schedule.id);
 		return this.serializeSchedule(schedule);
 	}
 
@@ -146,42 +146,43 @@ export class SometoolScheduleService implements OnModuleInit, OnModuleDestroy {
 		);
 	}
 
-	private registerSchedule(id: string): void {
+	private async registerSchedule(id: string): Promise<void> {
 		this.removeScheduleJob(id);
 
-		this.prisma.systemControlSchedules
-			.findUnique({ where: { id } })
-			.then((schedule) => {
-				if (!schedule) return;
-				if (!schedule.enabled) return;
-
-				const cronExpression = this.buildCronExpression(schedule.timeOfDay);
-				if (!cronExpression) {
-					this.logger.warn(
-						`Invalid timeOfDay for schedule ${schedule.id}: ${schedule.timeOfDay}`,
-					);
-					return;
-				}
-
-				const job = new CronJob(
-					cronExpression,
-					() => this.handleScheduleTick(schedule.id),
-					null,
-					false,
-					schedule.timezone,
-				);
-
-				this.schedulerRegistry.addCronJob(schedule.id, job);
-				job.start();
-				this.logger.log(`Registered schedule ${schedule.id}`);
-			})
-			.catch((error) => {
-				this.logger.error(
-					`Failed to register schedule ${id}: ${
-						error instanceof Error ? error.message : "Unknown error"
-					}`,
-				);
+		try {
+			const schedule = await this.prisma.systemControlSchedules.findUnique({
+				where: { id },
 			});
+			if (!schedule) return;
+			if (!schedule.enabled) return;
+
+			const cronExpression = this.buildCronExpression(schedule.timeOfDay);
+			if (!cronExpression) {
+				this.logger.warn(
+					`Invalid timeOfDay for schedule ${schedule.id}: ${schedule.timeOfDay}`,
+				);
+				return;
+			}
+
+			const job = new CronJob(
+				cronExpression,
+				() => this.handleScheduleTick(schedule.id),
+				null,
+				false,
+				schedule.timezone,
+			);
+
+			this.schedulerRegistry.addCronJob(schedule.id, job);
+			job.start();
+			this.logger.log(`Registered schedule ${schedule.id}`);
+		} catch (error) {
+			this.logger.error(
+				`Failed to register schedule ${id}: ${
+					error instanceof Error ? error.message : "Unknown error"
+				}`,
+			);
+			throw error;
+		}
 	}
 
 	private serializeSchedule(schedule: {
@@ -256,38 +257,46 @@ export class SometoolScheduleService implements OnModuleInit, OnModuleDestroy {
 	}
 
 	private async handleScheduleTick(id: string): Promise<void> {
-		const schedule = await this.prisma.systemControlSchedules.findUnique({
-			where: { id },
-		});
-		if (!schedule || !schedule.enabled) return;
-
-		if (await this.sometoolService.isAnyJobRunning()) {
-			await this.prisma.systemControlSchedules.update({
+		try {
+			const schedule = await this.prisma.systemControlSchedules.findUnique({
 				where: { id },
-				data: {
-					lastRunAt: new Date(),
-					lastStatus: "skipped",
-				},
 			});
-			return;
-		}
+			if (!schedule || !schedule.enabled) return;
 
-		let options: Record<string, boolean> = {};
-		if (schedule.options) {
-			try {
-				options = JSON.parse(schedule.options) as Record<string, boolean>;
-			} catch {
-				options = {};
+			if (await this.sometoolService.isAnyJobRunning()) {
+				await this.prisma.systemControlSchedules.update({
+					where: { id },
+					data: {
+						lastRunAt: new Date(),
+						lastStatus: "skipped",
+					},
+				});
+				return;
 			}
-		}
 
-		await this.sometoolService.runSometoolWithJobManagement(
-			options,
-			undefined,
-			{
-				scheduleId: schedule.id,
-				maxRuntimeSeconds: schedule.maxRuntimeSeconds ?? undefined,
-			},
-		);
+			let options: Record<string, boolean> = {};
+			if (schedule.options) {
+				try {
+					options = JSON.parse(schedule.options) as Record<string, boolean>;
+				} catch {
+					options = {};
+				}
+			}
+
+			await this.sometoolService.runSometoolWithJobManagement(
+				options,
+				undefined,
+				{
+					scheduleId: schedule.id,
+					maxRuntimeSeconds: schedule.maxRuntimeSeconds ?? undefined,
+				},
+			);
+		} catch (error) {
+			this.logger.error(
+				`Schedule tick failed for ${id}: ${
+					error instanceof Error ? error.message : "Unknown error"
+				}`,
+			);
+		}
 	}
 }

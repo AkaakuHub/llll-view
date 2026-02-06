@@ -20,6 +20,7 @@ export class SometoolService {
 	private readonly acbExtractorPath: string;
 	private readonly cachePlainPath: string;
 	private readonly activeJobs = new Map<string, ReturnType<typeof spawn>>(); // jobId -> child process
+	private jobStartLock = false;
 
 	constructor(
 		private prisma: PrismaService,
@@ -304,35 +305,44 @@ export class SometoolService {
 			maxRuntimeSeconds?: number;
 		},
 	): Promise<{ jobId: string; success: boolean; error?: string }> {
-		if (await this.isAnyJobRunning()) {
+		if (this.jobStartLock) {
 			return {
 				jobId: "",
 				success: false,
 				error: "Another job is already running",
 			};
 		}
-
-		const jobId = randomUUID();
-		const commandName = this.getCommandName(options);
-
-		// ジョブをDBに作成
-		await this.prisma.systemControlJobs.create({
-			data: {
-				id: jobId,
-				command: commandName,
-				options: JSON.stringify(options),
-				status: "pending",
-				scheduleId: meta?.scheduleId,
-			},
-		});
-
-		const maxRuntimeMs = meta?.maxRuntimeSeconds
-			? meta.maxRuntimeSeconds * 1000
-			: null;
+		this.jobStartLock = true;
+		let jobId = "";
 		let timeoutHandle: NodeJS.Timeout | null = null;
-		let timedOut = false;
-
 		try {
+			if (await this.isAnyJobRunning()) {
+				return {
+					jobId: "",
+					success: false,
+					error: "Another job is already running",
+				};
+			}
+
+			jobId = randomUUID();
+			const commandName = this.getCommandName(options);
+
+			// ジョブをDBに作成
+			await this.prisma.systemControlJobs.create({
+				data: {
+					id: jobId,
+					command: commandName,
+					options: JSON.stringify(options),
+					status: "pending",
+					scheduleId: meta?.scheduleId,
+				},
+			});
+
+			const maxRuntimeMs = meta?.maxRuntimeSeconds
+				? meta.maxRuntimeSeconds * 1000
+				: null;
+			let timedOut = false;
+
 			const sometoolBinary = this.sometoolBinaryPath;
 			const args: string[] = [];
 
@@ -484,6 +494,9 @@ export class SometoolService {
 
 			return { jobId, success: true };
 		} catch (error) {
+			if (timeoutHandle) {
+				clearTimeout(timeoutHandle);
+			}
 			// 例外エラー時にも最終ログを保存
 			try {
 				await this.saveJobLogOnCompletion(jobId);
@@ -511,6 +524,8 @@ export class SometoolService {
 				success: false,
 				error: error instanceof Error ? error.message : "Unknown error",
 			};
+		} finally {
+			this.jobStartLock = false;
 		}
 	}
 

@@ -1,11 +1,15 @@
 import * as fs from "node:fs";
 import { Controller, Get } from "@nestjs/common";
+import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { GlobalConfigService } from "./config/global-config.service";
 
+@ApiTags("system")
 @Controller()
 export class AppController {
 	constructor(private globalConfig: GlobalConfigService) {}
 	@Get("status")
+	@ApiOperation({ summary: "Get system status" })
+	@ApiResponse({ status: 200, description: "Status retrieved successfully" })
 	async getStatus() {
 		try {
 			// sometoolバイナリの存在確認
@@ -43,6 +47,11 @@ export class AppController {
 	}
 
 	@Get("time")
+	@ApiOperation({ summary: "Get server time" })
+	@ApiResponse({
+		status: 200,
+		description: "Server time retrieved successfully",
+	})
 	async getServerTime() {
 		const now = new Date();
 		const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
