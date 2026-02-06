@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetcher } from "../../../lib/fetcher";
 import Button from "../../ui/Button";
 import AssetStats from "./AssetStats";
+import ScheduleControls from "./ScheduleControls";
 import VirtualLogViewer from "./VirtualLogViewer";
 
 interface SometoolStatus {
@@ -312,6 +313,7 @@ const SometoolControls = () => {
 					</Button>
 				</div>
 
+				<ScheduleControls />
 				{/* Execution Commands */}
 				<div className="space-y-4">
 					<h3 className="text-lg font-semibold text-text border-b border-border pb-2">

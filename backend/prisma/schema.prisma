@@ -291,9 +291,38 @@ model systemControlJobs {
   processId     Int?     // sometoolプロセスID（最重要！）
   outputLog     String?  // 累積出力ログ
   errorMessage  String?
+  scheduleId    String?  // スケジュール起動の場合のID
   createdAt     DateTime @default(now())
   startedAt     DateTime?
   completedAt   DateTime?
 
   @@map("system_control_jobs")
+}
+
+model systemControlSchedules {
+  id                String   @id @default(cuid())
+  name              String
+  enabled           Boolean  @default(true)
+  timeOfDay         String   // "HH:mm"
+  timezone          String   // IANA TZ, e.g. "Asia/Tokyo"
+  options           String?  // JSON形式でオプションを保存
+  maxRuntimeSeconds Int?     // 最大実行時間（秒）
+  lastRunAt         DateTime?
+  lastStatus        String?
+  lastJobId         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("system_control_schedules")
+}
+
+model systemControlSettings {
+  id              Int      @id @default(1)
+  notifyOnSuccess Boolean  @default(true)
+  notifyOnlyUpdates Boolean @default(true)
+  notifyOnFailure Boolean  @default(true)
+  includeLog      Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
+
+  @@map("system_control_settings")
 }
