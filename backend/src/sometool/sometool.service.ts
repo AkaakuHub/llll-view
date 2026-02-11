@@ -859,9 +859,7 @@ export class SometoolService {
 				: null;
 
 		const logSnippet =
-			settings.includeLog && job.outputLog
-				? `Log:\n${job.outputLog.slice(-1500)}`
-				: null;
+			settings.includeLog && job.outputLog ? `Log:\n${job.outputLog}` : null;
 
 		return [header.join("\n"), timing, error, logSnippet]
 			.filter(Boolean)

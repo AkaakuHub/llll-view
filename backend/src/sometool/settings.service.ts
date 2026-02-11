@@ -16,7 +16,6 @@ export class SometoolSettingsService {
 			where: { id: 1 },
 			create: {
 				id: 1,
-				notifyOnSuccess: true,
 				notifyOnlyUpdates: true,
 				notifyOnFailure: true,
 				includeLog: true,
@@ -44,7 +43,6 @@ export class SometoolSettingsService {
 			where: { id: 1 },
 			create: {
 				id: 1,
-				notifyOnSuccess: true,
 				...next,
 			},
 			update: {
