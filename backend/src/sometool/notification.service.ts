@@ -5,6 +5,7 @@ const MAX_DISCORD_MESSAGE_LENGTH = 2000;
 const SAFE_CHUNK_LENGTH = 1900;
 const CHUNK_DELAY_MS = 1200;
 const RETRY_DELAY_MS = 1500;
+const DISCORD_SUPPRESS_NOTIFICATIONS_FLAG = 1 << 12;
 
 @Injectable()
 export class SometoolNotificationService {
@@ -16,52 +17,72 @@ export class SometoolNotificationService {
 		);
 	}
 
-	private getWebhookUrl(): string | null {
-		const url = process.env.DISCORD_WEBHOOK_URL;
-		if (!url) return null;
-		return url.trim().length > 0 ? url.trim() : null;
+	private getWebhookUrls(): string[] {
+		const raw = process.env.DISCORD_WEBHOOK_URL;
+		if (!raw) return [];
+		return raw
+			.split(/[,\n]/)
+			.map((value) => value.trim())
+			.filter((value) => value.length > 0);
 	}
 
 	async sendMessage(content: string): Promise<void> {
-		const webhookUrl = this.getWebhookUrl();
-		if (!webhookUrl) {
+		const webhookUrls = this.getWebhookUrls();
+		if (webhookUrls.length === 0) {
 			this.logger.warn("Discord webhook URL is not configured.");
 			return;
 		}
 
 		const chunks = this.chunkMessage(content);
-		for (const chunk of chunks) {
-			try {
-				let response = await fetch(webhookUrl, {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ content: chunk }),
-				});
-				if (response.status === 429) {
-					const retryAfter = response.headers.get("retry-after");
-					const delayMs = retryAfter
-						? Math.max(0, Number.parseFloat(retryAfter) * 1000)
-						: RETRY_DELAY_MS;
-					await this.delay(delayMs);
-					response = await fetch(webhookUrl, {
+		for (const webhookUrl of webhookUrls) {
+			let sentChunkCount = 0;
+			for (const chunk of chunks) {
+				if (!chunk) {
+					continue;
+				}
+
+				try {
+					const payload: { content: string; flags?: number } = {
+						content: chunk,
+					};
+					if (sentChunkCount > 0) {
+						payload.flags = DISCORD_SUPPRESS_NOTIFICATIONS_FLAG;
+					}
+
+					let response = await fetch(webhookUrl, {
 						method: "POST",
 						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify({ content: chunk }),
+						body: JSON.stringify(payload),
 					});
-				}
-				if (!response.ok) {
+					if (response.status === 429) {
+						const retryAfter = response.headers.get("retry-after");
+						const delayMs = retryAfter
+							? Math.max(0, Number.parseFloat(retryAfter) * 1000)
+							: RETRY_DELAY_MS;
+						await this.delay(delayMs);
+						response = await fetch(webhookUrl, {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify(payload),
+						});
+					}
+					if (!response.ok) {
+						this.logger.error(
+							`Discord webhook responded with ${response.status} ${response.statusText}`,
+						);
+						const errorText = await response.text();
+						this.logger.error(`Discord API response: ${errorText}`);
+					}
+				} catch (error) {
 					this.logger.error(
-						`Discord webhook responded with ${response.status}`,
+						`Failed to send Discord webhook: ${
+							error instanceof Error ? error.message : "Unknown error"
+						}`,
 					);
 				}
-			} catch (error) {
-				this.logger.error(
-					`Failed to send Discord webhook: ${
-						error instanceof Error ? error.message : "Unknown error"
-					}`,
-				);
+				sentChunkCount += 1;
+				await this.delay(CHUNK_DELAY_MS);
 			}
-			await this.delay(CHUNK_DELAY_MS);
 		}
 	}
 
