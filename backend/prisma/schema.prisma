@@ -318,7 +318,6 @@ model systemControlSchedules {
 
 model systemControlSettings {
   id              Int      @id @default(1)
-  notifyOnSuccess Boolean  @default(true)
   notifyOnlyUpdates Boolean @default(true)
   notifyOnFailure Boolean  @default(true)
   includeLog      Boolean  @default(true)
