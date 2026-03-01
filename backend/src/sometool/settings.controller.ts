@@ -23,6 +23,7 @@ export class SometoolSettingsController {
 				notifyOnlyUpdates: { type: "boolean" },
 				notifyOnFailure: { type: "boolean" },
 				includeLog: { type: "boolean" },
+				summarizeLog: { type: "boolean" },
 			},
 		},
 	})
@@ -33,6 +34,7 @@ export class SometoolSettingsController {
 			notifyOnlyUpdates?: boolean;
 			notifyOnFailure?: boolean;
 			includeLog?: boolean;
+			summarizeLog?: boolean;
 		},
 	) {
 		return await this.settingsService.updateNotificationSettings(body);

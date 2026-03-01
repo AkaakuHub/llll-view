@@ -5,6 +5,7 @@ type NotificationSettings = {
 	notifyOnlyUpdates: boolean;
 	notifyOnFailure: boolean;
 	includeLog: boolean;
+	summarizeLog: boolean;
 };
 
 @Injectable()
@@ -19,6 +20,7 @@ export class SometoolSettingsService {
 				notifyOnlyUpdates: true,
 				notifyOnFailure: true,
 				includeLog: true,
+				summarizeLog: true,
 			},
 			update: {},
 		});
@@ -27,6 +29,7 @@ export class SometoolSettingsService {
 			notifyOnlyUpdates: settings.notifyOnlyUpdates,
 			notifyOnFailure: settings.notifyOnFailure,
 			includeLog: settings.includeLog,
+			summarizeLog: settings.summarizeLog,
 		};
 	}
 
@@ -54,6 +57,7 @@ export class SometoolSettingsService {
 			notifyOnlyUpdates: updated.notifyOnlyUpdates,
 			notifyOnFailure: updated.notifyOnFailure,
 			includeLog: updated.includeLog,
+			summarizeLog: updated.summarizeLog,
 		};
 	}
 }

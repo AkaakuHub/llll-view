@@ -35,6 +35,7 @@ type NotificationSettings = {
 	notifyOnlyUpdates: boolean;
 	notifyOnFailure: boolean;
 	includeLog: boolean;
+	summarizeLog: boolean;
 };
 
 type ServerTime = {
@@ -357,6 +358,24 @@ const ScheduleControls = () => {
 									onChange={(checked) =>
 										setSettings((prev) =>
 											prev ? { ...prev, includeLog: checked } : prev,
+										)
+									}
+									className="cursor-pointer"
+								/>
+							</div>
+							<div className="md:col-span-3 flex items-center justify-between gap-2 bg-muted/20 rounded-md p-3 border border-border">
+								<div className="flex flex-col">
+									<span>Summarize Output Log</span>
+									<span className="text-xs text-muted">
+										Available only when Include Output Log is enabled.
+									</span>
+								</div>
+								<Toggle
+									checked={settings.summarizeLog}
+									disabled={!settings.includeLog}
+									onChange={(checked) =>
+										setSettings((prev) =>
+											prev ? { ...prev, summarizeLog: checked } : prev,
 										)
 									}
 									className="cursor-pointer"
