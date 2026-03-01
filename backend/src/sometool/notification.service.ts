@@ -1,3 +1,5 @@
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { Injectable } from "@nestjs/common";
 import { AppLoggerService } from "../logger/logger.service";
 
@@ -84,6 +86,110 @@ export class SometoolNotificationService {
 				await this.delay(CHUNK_DELAY_MS);
 			}
 		}
+	}
+
+	async sendMessageWithFiles(
+		content: string,
+		filePaths: string[],
+	): Promise<{ payloadTooLarge: boolean }> {
+		const webhookUrls = this.getWebhookUrls();
+		if (webhookUrls.length === 0) {
+			this.logger.warn("Discord webhook URL is not configured.");
+			return { payloadTooLarge: false };
+		}
+		if (filePaths.length === 0) {
+			await this.sendMessage(content);
+			return { payloadTooLarge: false };
+		}
+
+		let payloadTooLarge = false;
+		for (const webhookUrl of webhookUrls) {
+			try {
+				const response = await this.postMultipartMessage(
+					webhookUrl,
+					content,
+					filePaths,
+				);
+
+				if (!response.ok) {
+					const errorText = await response.text();
+					if (
+						response.status === 413 ||
+						/payload too large|request entity too large|file size/i.test(
+							errorText,
+						)
+					) {
+						this.logger.warn(
+							`Discord attachment payload too large (${response.status})`,
+						);
+						payloadTooLarge = true;
+						continue;
+					}
+
+					this.logger.error(
+						`Discord webhook responded with ${response.status} ${response.statusText}`,
+					);
+					this.logger.error(`Discord API response: ${errorText}`);
+				}
+			} catch (error) {
+				this.logger.error(
+					`Failed to send Discord webhook with files: ${
+						error instanceof Error ? error.message : "Unknown error"
+					}`,
+				);
+			}
+		}
+
+		return { payloadTooLarge };
+	}
+
+	private async postMultipartMessage(
+		webhookUrl: string,
+		content: string,
+		filePaths: string[],
+	): Promise<Response> {
+		const form = await this.buildMultipartFormData(content, filePaths);
+
+		let response = await fetch(webhookUrl, {
+			method: "POST",
+			body: form,
+		});
+		if (response.status === 429) {
+			const retryAfter = response.headers.get("retry-after");
+			const delayMs = retryAfter
+				? Math.max(0, Number.parseFloat(retryAfter) * 1000)
+				: RETRY_DELAY_MS;
+			await this.delay(delayMs);
+			const retryForm = await this.buildMultipartFormData(content, filePaths);
+			response = await fetch(webhookUrl, {
+				method: "POST",
+				body: retryForm,
+			});
+		}
+
+		return response;
+	}
+
+	private async buildMultipartFormData(
+		content: string,
+		filePaths: string[],
+	): Promise<FormData> {
+		const form = new FormData();
+		form.append("payload_json", JSON.stringify({ content }));
+
+		for (let i = 0; i < filePaths.length; i += 1) {
+			const filePath = filePaths[i];
+			const data = await fs.readFile(filePath);
+			const bytes = Uint8Array.from(data);
+			const fileName = path.basename(filePath);
+			form.append(
+				`files[${i}]`,
+				new Blob([bytes], { type: "audio/mp4" }),
+				fileName,
+			);
+		}
+
+		return form;
 	}
 
 	private chunkMessage(content: string): string[] {

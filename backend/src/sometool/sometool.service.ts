@@ -4,6 +4,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { promisify } from "node:util";
 import { Injectable } from "@nestjs/common";
+import { ConversionStatus } from "../../generated/prisma";
+import { AudioConverterService } from "../audio/services/audio-converter.service";
+import { AudioScannerService } from "../audio/services/audio-scanner.service";
 import { GlobalConfigService } from "../config/global-config.service";
 import { AppLoggerService } from "../logger/logger.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -46,6 +49,8 @@ export class SometoolService {
 		private appLoggerService: AppLoggerService,
 		private notificationService: SometoolNotificationService,
 		private settingsService: SometoolSettingsService,
+		private audioScannerService: AudioScannerService,
+		private audioConverterService: AudioConverterService,
 	) {
 		this.logger = this.appLoggerService.createLogger(SometoolService.name);
 		this.sometoolPath = path.resolve(this.globalConfig.getSometoolDirPath());
@@ -852,6 +857,10 @@ export class SometoolService {
 		if (payload) {
 			await this.notificationService.sendMessage(payload);
 		}
+
+		if (status === "completed") {
+			await this.triggerSoundConversionAndNotify(jobId);
+		}
 	}
 
 	private async buildNotificationPayload(
@@ -912,6 +921,133 @@ export class SometoolService {
 			`sound: ${counts.sound} files`,
 			`story: ${counts.story} files`,
 			`not categorized: ${counts.unclassified} files`,
+		].join("\n");
+	}
+
+	private async triggerSoundConversionAndNotify(jobId: string): Promise<void> {
+		const job = await this.prisma.systemControlJobs.findUnique({
+			where: { id: jobId },
+			select: { outputLog: true, scheduleId: true },
+		});
+		if (!job?.outputLog) return;
+		if (!job.scheduleId) return;
+
+		const soundAssetKeys = this.extractSoundAssetKeys(job.outputLog);
+		if (soundAssetKeys.length === 0) return;
+
+		await this.audioScannerService.scanAcbFiles();
+
+		const targetFilenames = soundAssetKeys.map((key) => `${key}.acb`);
+		const targets = await this.prisma.audioFiles.findMany({
+			where: {
+				status: ConversionStatus.PENDING,
+				filename: { in: targetFilenames },
+			},
+			select: {
+				id: true,
+				filename: true,
+			},
+		});
+		if (targets.length === 0) return;
+
+		const convertedTracks: Array<{ name: string; filePath: string }> = [];
+		for (const target of targets) {
+			const result = await this.audioConverterService.convertAcbToWav(
+				target.id,
+			);
+			if (!result.success) {
+				continue;
+			}
+
+			const convertedFile = await this.prisma.audioFiles.findUnique({
+				where: { id: target.id },
+				select: {
+					status: true,
+					outputPath: true,
+					displayName: true,
+					title: true,
+					filename: true,
+				},
+			});
+			if (
+				!convertedFile ||
+				convertedFile.status !== ConversionStatus.COMPLETED ||
+				!convertedFile.outputPath
+			) {
+				continue;
+			}
+
+			const resolvedOutputPath = this.resolveOutputPath(
+				convertedFile.outputPath,
+			);
+			if (!resolvedOutputPath || !fs.existsSync(resolvedOutputPath)) {
+				continue;
+			}
+
+			convertedTracks.push({
+				name:
+					convertedFile.displayName ||
+					convertedFile.title ||
+					convertedFile.filename,
+				filePath: resolvedOutputPath,
+			});
+		}
+		if (convertedTracks.length === 0) return;
+
+		const trackNames = convertedTracks.map((track) => track.name);
+		const attachmentPayload = this.buildConvertedSoundPayload(trackNames);
+		const sendResult = await this.notificationService.sendMessageWithFiles(
+			attachmentPayload,
+			convertedTracks.map((track) => track.filePath),
+		);
+		if (sendResult.payloadTooLarge) {
+			await this.notificationService.sendMessage(
+				this.buildConvertedSoundNamesOnlyPayload(trackNames),
+			);
+		}
+	}
+
+	private extractSoundAssetKeys(outputLog: string): string[] {
+		const entries = this.extractUpdatedEntries(outputLog);
+		const keys = new Set<string>();
+
+		for (const entry of entries) {
+			if (
+				this.detectTentativeCategory(entry) !== TENTATIVE_LOG_CATEGORY.sound
+			) {
+				continue;
+			}
+			const normalized = entry.toLowerCase();
+			const keyMatch = normalized.match(/^(bgm_live_\d{8})(?:\..+)?$/);
+			if (keyMatch?.[1]) {
+				keys.add(keyMatch[1]);
+			}
+		}
+
+		return Array.from(keys);
+	}
+
+	private resolveOutputPath(outputPath: string): string | null {
+		if (!outputPath) return null;
+		if (path.isAbsolute(outputPath)) {
+			return outputPath;
+		}
+		const relative = outputPath.startsWith("/")
+			? outputPath.slice(1)
+			: outputPath;
+		return path.join(this.globalConfig.getProjectRootPath(), relative);
+	}
+
+	private buildConvertedSoundPayload(trackNames: string[]): string {
+		const lines = trackNames.map((name) => `- ${name}`);
+		return ["Converted Tracks:", ...lines].join("\n");
+	}
+
+	private buildConvertedSoundNamesOnlyPayload(trackNames: string[]): string {
+		const lines = trackNames.map((name) => `- ${name}`);
+		return [
+			"Converted Tracks (file attachment skipped due payload size):",
+			...lines,
 		].join("\n");
 	}
 
