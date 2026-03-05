@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist-scripts",
+    "declaration": false,
+    "sourceMap": false,
+    "incremental": false
+  },
+  "include": ["scripts/**/*.ts", "src/sometool/log-classifier.ts"],
+  "exclude": ["node_modules", "dist", "dist-scripts"]
+}

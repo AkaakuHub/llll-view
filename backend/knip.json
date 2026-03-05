@@ -1,6 +1,6 @@
 {
-  "entry": ["src/main.ts"],
-  "ignore": ["**/node_modules/**", "**/dist/**"],
+  "entry": ["src/main.ts", "scripts/debug-log-classification.ts"],
+  "ignore": ["**/node_modules/**", "**/dist/**", "**/dist-scripts/**"],
   "ignoreDependencies": ["@prisma/client", "swagger-ui-express", "@types/glob", "@nestjs/schematics"],
   "ignoreBinaries": ["sleep", "lsof"]
 }
