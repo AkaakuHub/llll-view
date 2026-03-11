@@ -10,6 +10,7 @@ import { AudioScannerService } from "../audio/services/audio-scanner.service";
 import { GlobalConfigService } from "../config/global-config.service";
 import { AppLoggerService } from "../logger/logger.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { type DiscordWebhookMode } from "./discord-webhook-config";
 import {
 	extractSoundAssetKeys,
 	summarizeReportedCounts,
@@ -809,14 +810,7 @@ export class SometoolService {
 		if (settings.notifyOnlyUpdates) {
 			return;
 		}
-		const payload = await this.buildNotificationPayload(
-			jobId,
-			"started",
-			settings,
-		);
-		if (payload) {
-			await this.notificationService.sendMessage(payload);
-		}
+		await this.sendRegularNotifications(jobId, "started", settings);
 	}
 
 	private async notifyJobCompletion(
@@ -835,17 +829,48 @@ export class SometoolService {
 			}
 		}
 
-		const payload = await this.buildNotificationPayload(
-			jobId,
-			status,
-			settings,
-		);
-		if (payload) {
-			await this.notificationService.sendMessage(payload);
-		}
+		await this.sendRegularNotifications(jobId, status, settings);
 
 		if (status === "completed") {
-			await this.triggerSoundConversionAndNotify(jobId);
+			await this.triggerSoundConversionAndNotify(jobId, settings.webhooks);
+		}
+	}
+
+	private async sendRegularNotifications(
+		jobId: string,
+		status: "started" | "completed" | "failed",
+		settings: {
+			includeLog: boolean;
+			webhooks: Array<{ id: string; mode: DiscordWebhookMode }>;
+		},
+	): Promise<void> {
+		const normalWebhookIds = this.getWebhookIdsByMode(
+			settings.webhooks,
+			"normal",
+		);
+		const summaryWebhookIds = this.getWebhookIdsByMode(
+			settings.webhooks,
+			"summary",
+		);
+
+		if (normalWebhookIds.length > 0) {
+			const payload = await this.buildNotificationPayload(jobId, status, {
+				includeLog: settings.includeLog,
+				summarizeLog: false,
+			});
+			if (payload) {
+				await this.notificationService.sendMessage(payload, normalWebhookIds);
+			}
+		}
+
+		if (summaryWebhookIds.length > 0) {
+			const payload = await this.buildNotificationPayload(jobId, status, {
+				includeLog: settings.includeLog,
+				summarizeLog: true,
+			});
+			if (payload) {
+				await this.notificationService.sendMessage(payload, summaryWebhookIds);
+			}
 		}
 	}
 
@@ -902,7 +927,10 @@ export class SometoolService {
 		].join("\n");
 	}
 
-	private async triggerSoundConversionAndNotify(jobId: string): Promise<void> {
+	private async triggerSoundConversionAndNotify(
+		jobId: string,
+		webhooks: Array<{ id: string; mode: DiscordWebhookMode }>,
+	): Promise<void> {
 		const job = await this.prisma.systemControlJobs.findUnique({
 			where: { id: jobId },
 			select: { outputLog: true, scheduleId: true },
@@ -910,6 +938,10 @@ export class SometoolService {
 		if (!job?.outputLog) return;
 		if (!job.scheduleId) return;
 
+		const soundOnlyWebhookIds = this.getWebhookIdsByMode(
+			webhooks,
+			"music_only",
+		);
 		const soundAssetKeys = extractSoundAssetKeys(job.outputLog);
 		if (soundAssetKeys.length === 0) return;
 
@@ -973,14 +1005,20 @@ export class SometoolService {
 		if (convertedTracks.length === 0) return;
 
 		const trackNames = convertedTracks.map((track) => track.name);
+		if (soundOnlyWebhookIds.length === 0) {
+			return;
+		}
+
 		const attachmentPayload = this.buildConvertedSoundPayload(trackNames);
 		const sendResult = await this.notificationService.sendMessageWithFiles(
 			attachmentPayload,
 			convertedTracks.map((track) => track.filePath),
+			soundOnlyWebhookIds,
 		);
 		if (sendResult.payloadTooLarge) {
 			await this.notificationService.sendMessage(
 				this.buildConvertedSoundNamesOnlyPayload(trackNames),
+				soundOnlyWebhookIds,
 			);
 		}
 	}
@@ -997,16 +1035,26 @@ export class SometoolService {
 	}
 
 	private buildConvertedSoundPayload(trackNames: string[]): string {
+		const heading =
+			trackNames.length === 1 ? "New song is added!" : "New songs are added!";
 		const lines = trackNames.map((name) => `- ${name}`);
-		return ["Converted Tracks:", ...lines].join("\n");
+		return [heading, "", ...lines].join("\n");
 	}
 
 	private buildConvertedSoundNamesOnlyPayload(trackNames: string[]): string {
+		const heading =
+			trackNames.length === 1 ? "New song is added!" : "New songs are added!";
 		const lines = trackNames.map((name) => `- ${name}`);
-		return [
-			"Converted Tracks (file attachment skipped due payload size):",
-			...lines,
-		].join("\n");
+		return [heading, "", ...lines].join("\n");
+	}
+
+	private getWebhookIdsByMode(
+		webhooks: Array<{ id: string; mode: DiscordWebhookMode }>,
+		mode: DiscordWebhookMode,
+	): string[] {
+		return webhooks
+			.filter((webhook) => webhook.mode === mode)
+			.map((webhook) => webhook.id);
 	}
 
 	private formatServerTime(date: Date): string {

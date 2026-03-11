@@ -23,7 +23,20 @@ export class SometoolSettingsController {
 				notifyOnlyUpdates: { type: "boolean" },
 				notifyOnFailure: { type: "boolean" },
 				includeLog: { type: "boolean" },
-				summarizeLog: { type: "boolean" },
+				webhooks: {
+					type: "array",
+					items: {
+						type: "object",
+						properties: {
+							id: { type: "string" },
+							mode: {
+								type: "string",
+								enum: ["normal", "summary", "music_only"],
+							},
+						},
+						required: ["id", "mode"],
+					},
+				},
 			},
 		},
 	})
@@ -34,7 +47,10 @@ export class SometoolSettingsController {
 			notifyOnlyUpdates?: boolean;
 			notifyOnFailure?: boolean;
 			includeLog?: boolean;
-			summarizeLog?: boolean;
+			webhooks?: Array<{
+				id: string;
+				mode: "normal" | "summary" | "music_only";
+			}>;
 		},
 	) {
 		return await this.settingsService.updateNotificationSettings(body);

@@ -2,6 +2,10 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { Injectable } from "@nestjs/common";
 import { AppLoggerService } from "../logger/logger.service";
+import {
+	type DiscordWebhookTarget,
+	parseDiscordWebhookTargets,
+} from "./discord-webhook-config";
 
 const MAX_DISCORD_MESSAGE_LENGTH = 2000;
 const SAFE_CHUNK_LENGTH = 1900;
@@ -19,24 +23,19 @@ export class SometoolNotificationService {
 		);
 	}
 
-	private getWebhookUrls(): string[] {
-		const raw = process.env.DISCORD_WEBHOOK_URL;
-		if (!raw) return [];
-		return raw
-			.split(/[,\n]/)
-			.map((value) => value.trim())
-			.filter((value) => value.length > 0);
+	getConfiguredWebhooks(): DiscordWebhookTarget[] {
+		return parseDiscordWebhookTargets(process.env.DISCORD_WEBHOOK_URL);
 	}
 
-	async sendMessage(content: string): Promise<void> {
-		const webhookUrls = this.getWebhookUrls();
-		if (webhookUrls.length === 0) {
+	async sendMessage(content: string, targetIds?: string[]): Promise<void> {
+		const webhooks = this.getTargetWebhooks(targetIds);
+		if (webhooks.length === 0) {
 			this.logger.warn("Discord webhook URL is not configured.");
 			return;
 		}
 
 		const chunks = this.chunkMessage(content);
-		for (const webhookUrl of webhookUrls) {
+		for (const webhook of webhooks) {
 			let sentChunkCount = 0;
 			for (const chunk of chunks) {
 				if (!chunk) {
@@ -51,7 +50,7 @@ export class SometoolNotificationService {
 						payload.flags = DISCORD_SUPPRESS_NOTIFICATIONS_FLAG;
 					}
 
-					let response = await fetch(webhookUrl, {
+					let response = await fetch(webhook.url, {
 						method: "POST",
 						headers: { "Content-Type": "application/json" },
 						body: JSON.stringify(payload),
@@ -62,7 +61,7 @@ export class SometoolNotificationService {
 							? Math.max(0, Number.parseFloat(retryAfter) * 1000)
 							: RETRY_DELAY_MS;
 						await this.delay(delayMs);
-						response = await fetch(webhookUrl, {
+						response = await fetch(webhook.url, {
 							method: "POST",
 							headers: { "Content-Type": "application/json" },
 							body: JSON.stringify(payload),
@@ -91,22 +90,25 @@ export class SometoolNotificationService {
 	async sendMessageWithFiles(
 		content: string,
 		filePaths: string[],
+		targetIds?: string[],
 	): Promise<{ payloadTooLarge: boolean }> {
-		const webhookUrls = this.getWebhookUrls();
-		if (webhookUrls.length === 0) {
+		const webhooks = this.getTargetWebhooks(targetIds);
+		if (webhooks.length === 0) {
 			this.logger.warn("Discord webhook URL is not configured.");
 			return { payloadTooLarge: false };
 		}
 		if (filePaths.length === 0) {
-			await this.sendMessage(content);
+			this.logger.warn(
+				"Discord file notification skipped because no files were provided.",
+			);
 			return { payloadTooLarge: false };
 		}
 
 		let payloadTooLarge = false;
-		for (const webhookUrl of webhookUrls) {
+		for (const webhook of webhooks) {
 			try {
 				const response = await this.postMultipartMessage(
-					webhookUrl,
+					webhook.url,
 					content,
 					filePaths,
 				);
@@ -141,6 +143,16 @@ export class SometoolNotificationService {
 		}
 
 		return { payloadTooLarge };
+	}
+
+	private getTargetWebhooks(targetIds?: string[]): DiscordWebhookTarget[] {
+		const webhooks = this.getConfiguredWebhooks();
+		if (!targetIds || targetIds.length === 0) {
+			return webhooks;
+		}
+
+		const targetIdSet = new Set(targetIds);
+		return webhooks.filter((webhook) => targetIdSet.has(webhook.id));
 	}
 
 	private async postMultipartMessage(
