@@ -4,7 +4,8 @@ import Button from "../../ui/Button";
 import Input from "../../ui/Input";
 import Toggle from "../../ui/Toggle";
 
-const scheduleOptions = [
+const scheduleModeOptions = [
+	{ key: "full_sync", label: "Full Synchronization" },
 	{ key: "dbonly", label: "Database Only" },
 	{ key: "analyze", label: "Analysis Mode" },
 	{ key: "force", label: "Force Update" },
@@ -13,7 +14,7 @@ const scheduleOptions = [
 	{ key: "keepraw", label: "Keep Raw" },
 ] as const;
 
-type ScheduleOptionKey = (typeof scheduleOptions)[number]["key"];
+type ScheduleModeKey = (typeof scheduleModeOptions)[number]["key"];
 
 type Schedule = {
 	id: string;
@@ -34,7 +35,10 @@ type Schedule = {
 type NotificationSettings = {
 	notifyOnlyUpdates: boolean;
 	notifyOnFailure: boolean;
-	includeLog: boolean;
+	webhooks: Array<{
+		id: string;
+		mode: "full_log" | "summary" | "music_only";
+	}>;
 };
 
 type ServerTime = {
@@ -49,11 +53,11 @@ type ScheduleFormState = {
 	enabled: boolean;
 	timeOfDay: string;
 	timezone: string;
-	options: Record<ScheduleOptionKey, boolean>;
+	mode: ScheduleModeKey;
 	maxRuntimeMinutes: string;
 };
 
-const defaultOptions: Record<ScheduleOptionKey, boolean> = {
+const defaultOptions: Record<Exclude<ScheduleModeKey, "full_sync">, boolean> = {
 	dbonly: false,
 	analyze: false,
 	force: false,
@@ -85,6 +89,31 @@ const formatTimeInZone = (iso: string, timeZone: string) => {
 
 const DEFAULT_TIMEZONE = "Asia/Tokyo";
 
+const notificationModeOptions = [
+	{ value: "full_log", label: "Full Log" },
+	{ value: "summary", label: "Summary" },
+	{ value: "music_only", label: "Music Only" },
+] as const;
+
+const scheduleOptionsToMode = (
+	options?: Record<string, boolean>,
+): ScheduleModeKey => {
+	if (options?.dbonly) return "dbonly";
+	if (options?.analyze) return "analyze";
+	if (options?.force) return "force";
+	if (options?.convert) return "convert";
+	if (options?.master) return "master";
+	if (options?.keepraw) return "keepraw";
+	return "full_sync";
+};
+
+const scheduleModeToOptions = (
+	mode: ScheduleModeKey,
+): Record<Exclude<ScheduleModeKey, "full_sync">, boolean> => ({
+	...defaultOptions,
+	...(mode === "full_sync" ? {} : { [mode]: true }),
+});
+
 const buildFormState = (
 	schedule: Schedule | null,
 	fallbackTimezone: string,
@@ -95,7 +124,7 @@ const buildFormState = (
 			enabled: true,
 			timeOfDay: "12:00",
 			timezone: fallbackTimezone || DEFAULT_TIMEZONE,
-			options: { ...defaultOptions },
+			mode: "full_sync",
 			maxRuntimeMinutes: "-1",
 		};
 	}
@@ -112,10 +141,7 @@ const buildFormState = (
 		enabled: schedule.enabled,
 		timeOfDay: schedule.timeOfDay,
 		timezone: schedule.timezone,
-		options: {
-			...defaultOptions,
-			...(schedule.options || {}),
-		},
+		mode: scheduleOptionsToMode(schedule.options),
 		maxRuntimeMinutes,
 	};
 };
@@ -176,23 +202,18 @@ const ScheduleControls = () => {
 		loadSettings();
 	}, [loadServerTime, loadSchedules, loadSettings]);
 
-	useEffect(() => {
-		const interval = setInterval(() => {
-			setClientNow(new Date());
-		}, 1000);
-		return () => clearInterval(interval);
-	}, []);
-
 	const handleSaveSettings = async (next: NotificationSettings) => {
+		const previous = settings;
+		setSettings(next);
 		setSavingSettings(true);
 		try {
 			await fetcher("/sometool/settings/notifications", {
 				method: "POST",
 				body: JSON.stringify(next),
 			});
-			setSettings(next);
 		} catch (error) {
 			console.error("Failed to save settings:", error);
+			setSettings(previous);
 		} finally {
 			setSavingSettings(false);
 		}
@@ -215,7 +236,7 @@ const ScheduleControls = () => {
 			enabled: form.enabled,
 			timeOfDay: form.timeOfDay,
 			timezone: form.timezone,
-			options: form.options,
+			options: scheduleModeToOptions(form.mode),
 			maxRuntimeSeconds,
 		};
 
@@ -265,7 +286,10 @@ const ScheduleControls = () => {
 						</p>
 					</div>
 					<Button
-						onClick={loadServerTime}
+						onClick={() => {
+							setClientNow(new Date());
+							loadServerTime();
+						}}
 						variant="soft"
 						tone="megu"
 						size="sm"
@@ -311,56 +335,99 @@ const ScheduleControls = () => {
 						<h4 className="text-sm font-semibold text-text">
 							Discord Notifications
 						</h4>
-						{settings && (
-							<Button
-								onClick={() => handleSaveSettings(settings)}
-								variant="soft"
-								tone="saya"
-								size="sm"
-								loading={savingSettings}
-								className="cursor-pointer"
-							>
-								Save Settings
-							</Button>
+						{savingSettings && (
+							<div className="text-xs text-muted">Saving...</div>
 						)}
 					</div>
 					{settings ? (
-						<div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm text-text">
-							<div className="flex items-center justify-between gap-2 bg-muted/20 rounded-md p-3 border border-border">
-								<span>Notify Only Updates</span>
-								<Toggle
-									checked={settings.notifyOnlyUpdates}
-									onChange={(checked) =>
-										setSettings((prev) =>
-											prev ? { ...prev, notifyOnlyUpdates: checked } : prev,
-										)
-									}
-									className="cursor-pointer"
-								/>
+						<div className="space-y-4 text-sm text-text">
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+								<div className="flex items-center justify-between gap-2 bg-muted/20 rounded-md p-3 border border-border">
+									<span>Notify Only Updates</span>
+									<Toggle
+										checked={settings.notifyOnlyUpdates}
+										onChange={(checked) => {
+											const next = {
+												...settings,
+												notifyOnlyUpdates: checked,
+											};
+											void handleSaveSettings(next);
+										}}
+										className="cursor-pointer"
+									/>
+								</div>
+								<div className="flex items-center justify-between gap-2 bg-muted/20 rounded-md p-3 border border-border">
+									<span>Notify on Failure</span>
+									<Toggle
+										checked={settings.notifyOnFailure}
+										onChange={(checked) => {
+											const next = {
+												...settings,
+												notifyOnFailure: checked,
+											};
+											void handleSaveSettings(next);
+										}}
+										className="cursor-pointer"
+									/>
+								</div>
 							</div>
-							<div className="flex items-center justify-between gap-2 bg-muted/20 rounded-md p-3 border border-border">
-								<span>Notify on Failure</span>
-								<Toggle
-									checked={settings.notifyOnFailure}
-									onChange={(checked) =>
-										setSettings((prev) =>
-											prev ? { ...prev, notifyOnFailure: checked } : prev,
-										)
-									}
-									className="cursor-pointer"
-								/>
-							</div>
-							<div className="flex items-center justify-between gap-2 bg-muted/20 rounded-md p-3 border border-border">
-								<span>Include Output Log</span>
-								<Toggle
-									checked={settings.includeLog}
-									onChange={(checked) =>
-										setSettings((prev) =>
-											prev ? { ...prev, includeLog: checked } : prev,
-										)
-									}
-									className="cursor-pointer"
-								/>
+
+							<div className="border border-border rounded-lg overflow-hidden">
+								<div className="grid grid-cols-[minmax(0,1fr)_150px] bg-muted/15 px-3 py-2 text-xs uppercase tracking-wide text-muted">
+									<span>Webhook</span>
+									<span>Mode</span>
+								</div>
+								{settings.webhooks.length > 0 ? (
+									settings.webhooks.map((webhook) => (
+										<div
+											key={webhook.id}
+											className="grid grid-cols-[minmax(0,1fr)_150px] items-center gap-3 px-3 py-3 border-t border-border"
+										>
+											<div className="min-w-0">
+												<div className="font-medium text-text truncate">
+													{webhook.id}
+												</div>
+												<div className="text-xs text-muted">
+													{webhook.mode === "music_only"
+														? 'Receives only "New song is added!" file notifications.'
+														: webhook.mode === "summary"
+															? "Receives regular notifications with log summary."
+															: "Receives regular notifications with full output log."}
+												</div>
+											</div>
+											<select
+												value={webhook.mode}
+												onChange={(event) => {
+													const next = {
+														...settings,
+														webhooks: settings.webhooks.map((item) =>
+															item.id === webhook.id
+																? {
+																		...item,
+																		mode: event.target
+																			.value as NotificationSettings["webhooks"][number]["mode"],
+																	}
+																: item,
+														),
+													};
+													void handleSaveSettings(next);
+												}}
+												className="w-full px-3 py-2 bg-surface border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-saya cursor-pointer"
+											>
+												{notificationModeOptions.map((option) => (
+													<option key={option.value} value={option.value}>
+														{option.label}
+													</option>
+												))}
+											</select>
+										</div>
+									))
+								) : (
+									<div className="px-3 py-4 text-sm text-muted">
+										No Discord webhooks configured in
+										<code className="ml-1">DISCORD_WEBHOOK_URL</code>.
+									</div>
+								)}
 							</div>
 						</div>
 					) : (
@@ -634,28 +701,30 @@ const ScheduleEditor = ({
 				</div>
 			</div>
 
-			<div className="text-xs text-muted">
-				Full Synchronization is the default when no options are selected.
-			</div>
-			<div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-				{scheduleOptions.map((option) => (
-					<div
-						key={option.key}
-						className="flex items-center justify-between gap-2 bg-muted/20 rounded-md p-3 border border-border text-sm text-text"
-					>
-						<span>{option.label}</span>
-						<Toggle
-							checked={form.options[option.key]}
-							onChange={(checked) =>
-								setForm((prev) => ({
-									...prev,
-									options: { ...prev.options, [option.key]: checked },
-								}))
-							}
-							className="cursor-pointer"
-						/>
-					</div>
-				))}
+			<div>
+				<label
+					className="block text-xs text-muted mb-1"
+					htmlFor={`${idPrefix}-mode`}
+				>
+					Mode
+				</label>
+				<select
+					id={`${idPrefix}-mode`}
+					value={form.mode}
+					onChange={(event) =>
+						setForm((prev) => ({
+							...prev,
+							mode: event.target.value as ScheduleModeKey,
+						}))
+					}
+					className="w-full px-3 py-2 bg-surface border border-border rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-saya cursor-pointer"
+				>
+					{scheduleModeOptions.map((option) => (
+						<option key={option.key} value={option.key}>
+							{option.label}
+						</option>
+					))}
+				</select>
 			</div>
 
 			{mode === "existing" && schedule && (

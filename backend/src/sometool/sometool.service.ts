@@ -4,9 +4,17 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { promisify } from "node:util";
 import { Injectable } from "@nestjs/common";
+import { ConversionStatus } from "../../generated/prisma";
+import { AudioConverterService } from "../audio/services/audio-converter.service";
+import { AudioScannerService } from "../audio/services/audio-scanner.service";
 import { GlobalConfigService } from "../config/global-config.service";
 import { AppLoggerService } from "../logger/logger.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { type DiscordWebhookMode } from "./discord-webhook-config";
+import {
+	extractSoundAssetKeys,
+	summarizeReportedCounts,
+} from "./log-classifier";
 import { SometoolNotificationService } from "./notification.service";
 import { SometoolSettingsService } from "./settings.service";
 
@@ -28,6 +36,8 @@ export class SometoolService {
 		private appLoggerService: AppLoggerService,
 		private notificationService: SometoolNotificationService,
 		private settingsService: SometoolSettingsService,
+		private audioScannerService: AudioScannerService,
+		private audioConverterService: AudioConverterService,
 	) {
 		this.logger = this.appLoggerService.createLogger(SometoolService.name);
 		this.sometoolPath = path.resolve(this.globalConfig.getSometoolDirPath());
@@ -800,14 +810,7 @@ export class SometoolService {
 		if (settings.notifyOnlyUpdates) {
 			return;
 		}
-		const payload = await this.buildNotificationPayload(
-			jobId,
-			"started",
-			settings,
-		);
-		if (payload) {
-			await this.notificationService.sendMessage(payload);
-		}
+		await this.sendRegularNotifications(jobId, "started", settings);
 	}
 
 	private async notifyJobCompletion(
@@ -826,20 +829,56 @@ export class SometoolService {
 			}
 		}
 
-		const payload = await this.buildNotificationPayload(
-			jobId,
-			status,
-			settings,
+		await this.sendRegularNotifications(jobId, status, settings);
+
+		if (status === "completed") {
+			await this.triggerSoundConversionAndNotify(jobId, settings.webhooks);
+		}
+	}
+
+	private async sendRegularNotifications(
+		jobId: string,
+		status: "started" | "completed" | "failed",
+		settings: {
+			webhooks: Array<{ id: string; mode: DiscordWebhookMode }>;
+		},
+	): Promise<void> {
+		const fullLogWebhookIds = this.getWebhookIdsByMode(
+			settings.webhooks,
+			"full_log",
 		);
-		if (payload) {
-			await this.notificationService.sendMessage(payload);
+		const summaryWebhookIds = this.getWebhookIdsByMode(
+			settings.webhooks,
+			"summary",
+		);
+
+		if (fullLogWebhookIds.length > 0) {
+			const payload = await this.buildNotificationPayload(
+				jobId,
+				status,
+				"full_log",
+			);
+			if (payload) {
+				await this.notificationService.sendMessage(payload, fullLogWebhookIds);
+			}
+		}
+
+		if (summaryWebhookIds.length > 0) {
+			const payload = await this.buildNotificationPayload(
+				jobId,
+				status,
+				"summary",
+			);
+			if (payload) {
+				await this.notificationService.sendMessage(payload, summaryWebhookIds);
+			}
 		}
 	}
 
 	private async buildNotificationPayload(
 		jobId: string,
 		status: "started" | "completed" | "failed",
-		settings: { includeLog: boolean },
+		mode: "full_log" | "summary",
 	): Promise<string | null> {
 		const job = await this.prisma.systemControlJobs.findUnique({
 			where: { id: jobId },
@@ -858,12 +897,164 @@ export class SometoolService {
 					)}s`
 				: null;
 
-		const logSnippet =
-			settings.includeLog && job.outputLog ? `Log:\n${job.outputLog}` : null;
+		const logSnippet = job.outputLog
+			? this.buildLogSection(job.outputLog, mode === "summary")
+			: null;
 
 		return [header.join("\n"), timing, error, logSnippet]
 			.filter(Boolean)
 			.join("\n");
+	}
+
+	private buildLogSection(outputLog: string, summarizeLog: boolean): string {
+		if (!summarizeLog) {
+			return `Log:\n${outputLog}`;
+		}
+		return `Log Summary:\n${this.buildLogSummary(outputLog)}`;
+	}
+
+	private buildLogSummary(outputLog: string): string {
+		const counts = summarizeReportedCounts(outputLog);
+
+		return [
+			`sound: ${counts.sound} files`,
+			`story: ${counts.story} files`,
+			`gacha: ${counts.gacha} files`,
+			`show: ${counts.show} files`,
+			`stage: ${counts.stage} files`,
+			`database: ${counts.database} files`,
+			`other: ${counts.other} files`,
+		].join("\n");
+	}
+
+	private async triggerSoundConversionAndNotify(
+		jobId: string,
+		webhooks: Array<{ id: string; mode: DiscordWebhookMode }>,
+	): Promise<void> {
+		const job = await this.prisma.systemControlJobs.findUnique({
+			where: { id: jobId },
+			select: { outputLog: true, scheduleId: true },
+		});
+		if (!job?.outputLog) return;
+		if (!job.scheduleId) return;
+
+		const soundOnlyWebhookIds = this.getWebhookIdsByMode(
+			webhooks,
+			"music_only",
+		);
+		const soundAssetKeys = extractSoundAssetKeys(job.outputLog);
+		if (soundAssetKeys.length === 0) return;
+
+		await this.audioScannerService.scanAcbFiles();
+
+		const targetFilenames = soundAssetKeys.map((key) => `${key}.acb`);
+		const targets = await this.prisma.audioFiles.findMany({
+			where: {
+				status: ConversionStatus.PENDING,
+				filename: { in: targetFilenames },
+			},
+			select: {
+				id: true,
+				filename: true,
+			},
+		});
+		if (targets.length === 0) return;
+
+		const convertedTracks: Array<{ name: string; filePath: string }> = [];
+		for (const target of targets) {
+			const result = await this.audioConverterService.convertAcbToWav(
+				target.id,
+			);
+			if (!result.success) {
+				continue;
+			}
+
+			const convertedFile = await this.prisma.audioFiles.findUnique({
+				where: { id: target.id },
+				select: {
+					status: true,
+					outputPath: true,
+					displayName: true,
+					title: true,
+					filename: true,
+				},
+			});
+			if (
+				!convertedFile ||
+				convertedFile.status !== ConversionStatus.COMPLETED ||
+				!convertedFile.outputPath
+			) {
+				continue;
+			}
+
+			const resolvedOutputPath = this.resolveOutputPath(
+				convertedFile.outputPath,
+			);
+			if (!resolvedOutputPath || !fs.existsSync(resolvedOutputPath)) {
+				continue;
+			}
+
+			convertedTracks.push({
+				name:
+					convertedFile.displayName ||
+					convertedFile.title ||
+					convertedFile.filename,
+				filePath: resolvedOutputPath,
+			});
+		}
+		if (convertedTracks.length === 0) return;
+
+		const trackNames = convertedTracks.map((track) => track.name);
+		if (soundOnlyWebhookIds.length === 0) {
+			return;
+		}
+
+		const attachmentPayload = this.buildConvertedSoundPayload(trackNames);
+		const sendResult = await this.notificationService.sendMessageWithFiles(
+			attachmentPayload,
+			convertedTracks.map((track) => track.filePath),
+			soundOnlyWebhookIds,
+		);
+		if (sendResult.payloadTooLarge) {
+			await this.notificationService.sendMessage(
+				this.buildConvertedSoundNamesOnlyPayload(trackNames),
+				soundOnlyWebhookIds,
+			);
+		}
+	}
+
+	private resolveOutputPath(outputPath: string): string | null {
+		if (!outputPath) return null;
+		if (path.isAbsolute(outputPath)) {
+			return outputPath;
+		}
+		const relative = outputPath.startsWith("/")
+			? outputPath.slice(1)
+			: outputPath;
+		return path.join(this.globalConfig.getProjectRootPath(), relative);
+	}
+
+	private buildConvertedSoundPayload(trackNames: string[]): string {
+		const heading =
+			trackNames.length === 1 ? "New song is added!" : "New songs are added!";
+		const lines = trackNames.map((name) => `- ${name}`);
+		return [heading, "", ...lines].join("\n");
+	}
+
+	private buildConvertedSoundNamesOnlyPayload(trackNames: string[]): string {
+		const heading =
+			trackNames.length === 1 ? "New song is added!" : "New songs are added!";
+		const lines = trackNames.map((name) => `- ${name}`);
+		return [heading, "", ...lines].join("\n");
+	}
+
+	private getWebhookIdsByMode(
+		webhooks: Array<{ id: string; mode: DiscordWebhookMode }>,
+		mode: DiscordWebhookMode,
+	): string[] {
+		return webhooks
+			.filter((webhook) => webhook.mode === mode)
+			.map((webhook) => webhook.id);
 	}
 
 	private formatServerTime(date: Date): string {

@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { AudioModule } from "../audio/audio.module";
 import { ConfigModule } from "../config/config.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import { DatabaseController } from "./database.controller";
@@ -29,6 +30,6 @@ import { SometoolService } from "./sometool.service";
 		FileService,
 		DatabaseService,
 	],
-	imports: [PrismaModule, ConfigModule],
+	imports: [PrismaModule, ConfigModule, AudioModule],
 })
 export class SometoolModule {}
