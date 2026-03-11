@@ -34,6 +34,7 @@ function main(): void {
 	const outputLog = fs.readFileSync(resolvedPath, "utf8");
 	const updatedEntries = extractUpdatedEntries(outputLog);
 	const reportedCounts = summarizeReportedCounts(outputLog);
+	const reportedKeys = Object.keys(reportedCounts);
 
 	const classified: ClassifiedEntry[] = updatedEntries.map((entry) => {
 		const tentative = detectTentativeCategory(entry);
@@ -46,16 +47,19 @@ function main(): void {
 	});
 
 	classified.sort((a, b) => {
-		if (a.reported !== b.reported) return a.reported.localeCompare(b.reported);
+		if (a.reported !== b.reported) {
+			return reportedKeys.indexOf(a.reported) - reportedKeys.indexOf(b.reported);
+		}
 		if (a.tentative !== b.tentative) return a.tentative.localeCompare(b.tentative);
 		return a.entry.localeCompare(b.entry);
 	});
 
 	console.log(`# File: ${resolvedPath}`);
 	console.log(`# Updated entries: ${updatedEntries.length}`);
-	console.log(
-		`# Reported counts: sound=${reportedCounts.sound}, story=${reportedCounts.story}, unclassified=${reportedCounts.unclassified}`,
-	);
+	const reportedSummary = Object.entries(reportedCounts)
+		.map(([key, value]) => `${key}=${value}`)
+		.join(", ");
+	console.log(`# Reported counts: ${reportedSummary}`);
 	console.log("");
 	console.log("reported\ttentative\tentry");
 	for (const row of classified) {

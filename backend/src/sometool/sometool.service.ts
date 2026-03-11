@@ -894,7 +894,11 @@ export class SometoolService {
 		return [
 			`sound: ${counts.sound} files`,
 			`story: ${counts.story} files`,
-			`not categorized: ${counts.unclassified} files`,
+			`gacha: ${counts.gacha} files`,
+			`show: ${counts.show} files`,
+			`stage: ${counts.stage} files`,
+			`database: ${counts.database} files`,
+			`other: ${counts.other} files`,
 		].join("\n");
 	}
 
