@@ -15,13 +15,12 @@ type StoredWebhookModes = Partial<Record<string, DiscordWebhookMode>>;
 type NotificationSettings = {
 	notifyOnlyUpdates: boolean;
 	notifyOnFailure: boolean;
-	includeLog: boolean;
 	webhooks: NotificationWebhookSettings[];
 };
 
-const DEFAULT_WEBHOOK_MODE: DiscordWebhookMode = "normal";
+const DEFAULT_WEBHOOK_MODE: DiscordWebhookMode = "full_log";
 const VALID_WEBHOOK_MODES: DiscordWebhookMode[] = [
-	"normal",
+	"full_log",
 	"summary",
 	"music_only",
 ];
@@ -37,7 +36,6 @@ export class SometoolSettingsService {
 				id: 1,
 				notifyOnlyUpdates: true,
 				notifyOnFailure: true,
-				includeLog: true,
 				webhookModes: "{}",
 			},
 			update: {},
@@ -51,7 +49,6 @@ export class SometoolSettingsService {
 		return {
 			notifyOnlyUpdates: settings.notifyOnlyUpdates,
 			notifyOnFailure: settings.notifyOnFailure,
-			includeLog: settings.includeLog,
 			webhooks: configuredWebhooks.map((webhook) => ({
 				id: webhook.id,
 				mode: storedModes[webhook.id] ?? DEFAULT_WEBHOOK_MODE,
@@ -103,7 +100,6 @@ export class SometoolSettingsService {
 				notifyOnlyUpdates:
 					partial.notifyOnlyUpdates ?? current.notifyOnlyUpdates,
 				notifyOnFailure: partial.notifyOnFailure ?? current.notifyOnFailure,
-				includeLog: partial.includeLog ?? current.includeLog,
 				webhookModes: JSON.stringify(
 					Object.fromEntries(
 						nextWebhooks.map((webhook) => [webhook.id, webhook.mode]),
@@ -114,7 +110,6 @@ export class SometoolSettingsService {
 				notifyOnlyUpdates:
 					partial.notifyOnlyUpdates ?? current.notifyOnlyUpdates,
 				notifyOnFailure: partial.notifyOnFailure ?? current.notifyOnFailure,
-				includeLog: partial.includeLog ?? current.includeLog,
 				webhookModes: JSON.stringify(
 					Object.fromEntries(
 						nextWebhooks.map((webhook) => [webhook.id, webhook.mode]),
@@ -127,7 +122,6 @@ export class SometoolSettingsService {
 		return {
 			notifyOnlyUpdates: updated.notifyOnlyUpdates,
 			notifyOnFailure: updated.notifyOnFailure,
-			includeLog: updated.includeLog,
 			webhooks: configuredWebhooks.map((webhook) => ({
 				id: webhook.id,
 				mode: storedModes[webhook.id] ?? DEFAULT_WEBHOOK_MODE,

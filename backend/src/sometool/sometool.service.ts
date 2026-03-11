@@ -840,34 +840,35 @@ export class SometoolService {
 		jobId: string,
 		status: "started" | "completed" | "failed",
 		settings: {
-			includeLog: boolean;
 			webhooks: Array<{ id: string; mode: DiscordWebhookMode }>;
 		},
 	): Promise<void> {
-		const normalWebhookIds = this.getWebhookIdsByMode(
+		const fullLogWebhookIds = this.getWebhookIdsByMode(
 			settings.webhooks,
-			"normal",
+			"full_log",
 		);
 		const summaryWebhookIds = this.getWebhookIdsByMode(
 			settings.webhooks,
 			"summary",
 		);
 
-		if (normalWebhookIds.length > 0) {
-			const payload = await this.buildNotificationPayload(jobId, status, {
-				includeLog: settings.includeLog,
-				summarizeLog: false,
-			});
+		if (fullLogWebhookIds.length > 0) {
+			const payload = await this.buildNotificationPayload(
+				jobId,
+				status,
+				"full_log",
+			);
 			if (payload) {
-				await this.notificationService.sendMessage(payload, normalWebhookIds);
+				await this.notificationService.sendMessage(payload, fullLogWebhookIds);
 			}
 		}
 
 		if (summaryWebhookIds.length > 0) {
-			const payload = await this.buildNotificationPayload(jobId, status, {
-				includeLog: settings.includeLog,
-				summarizeLog: true,
-			});
+			const payload = await this.buildNotificationPayload(
+				jobId,
+				status,
+				"summary",
+			);
 			if (payload) {
 				await this.notificationService.sendMessage(payload, summaryWebhookIds);
 			}
@@ -877,7 +878,7 @@ export class SometoolService {
 	private async buildNotificationPayload(
 		jobId: string,
 		status: "started" | "completed" | "failed",
-		settings: { includeLog: boolean; summarizeLog: boolean },
+		mode: "full_log" | "summary",
 	): Promise<string | null> {
 		const job = await this.prisma.systemControlJobs.findUnique({
 			where: { id: jobId },
@@ -896,10 +897,9 @@ export class SometoolService {
 					)}s`
 				: null;
 
-		const logSnippet =
-			settings.includeLog && job.outputLog
-				? this.buildLogSection(job.outputLog, settings.summarizeLog)
-				: null;
+		const logSnippet = job.outputLog
+			? this.buildLogSection(job.outputLog, mode === "summary")
+			: null;
 
 		return [header.join("\n"), timing, error, logSnippet]
 			.filter(Boolean)

@@ -320,7 +320,6 @@ model systemControlSettings {
   id                Int      @id @default(1)
   notifyOnlyUpdates Boolean  @default(true)
   notifyOnFailure   Boolean  @default(true)
-  includeLog        Boolean  @default(true)
   webhookModes      String   @default("{}")
   updatedAt         DateTime @updatedAt
 

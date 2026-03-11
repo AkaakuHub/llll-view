@@ -1,4 +1,4 @@
-export type DiscordWebhookMode = "normal" | "summary" | "music_only";
+export type DiscordWebhookMode = "full_log" | "summary" | "music_only";
 
 export type DiscordWebhookTarget = {
 	id: string;

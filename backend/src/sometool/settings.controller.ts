@@ -22,7 +22,6 @@ export class SometoolSettingsController {
 			properties: {
 				notifyOnlyUpdates: { type: "boolean" },
 				notifyOnFailure: { type: "boolean" },
-				includeLog: { type: "boolean" },
 				webhooks: {
 					type: "array",
 					items: {
@@ -31,7 +30,7 @@ export class SometoolSettingsController {
 							id: { type: "string" },
 							mode: {
 								type: "string",
-								enum: ["normal", "summary", "music_only"],
+								enum: ["full_log", "summary", "music_only"],
 							},
 						},
 						required: ["id", "mode"],
@@ -46,10 +45,9 @@ export class SometoolSettingsController {
 		body: {
 			notifyOnlyUpdates?: boolean;
 			notifyOnFailure?: boolean;
-			includeLog?: boolean;
 			webhooks?: Array<{
 				id: string;
-				mode: "normal" | "summary" | "music_only";
+				mode: "full_log" | "summary" | "music_only";
 			}>;
 		},
 	) {

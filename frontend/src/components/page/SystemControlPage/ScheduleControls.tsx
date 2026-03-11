@@ -35,10 +35,9 @@ type Schedule = {
 type NotificationSettings = {
 	notifyOnlyUpdates: boolean;
 	notifyOnFailure: boolean;
-	includeLog: boolean;
 	webhooks: Array<{
 		id: string;
-		mode: "normal" | "summary" | "music_only";
+		mode: "full_log" | "summary" | "music_only";
 	}>;
 };
 
@@ -91,7 +90,7 @@ const formatTimeInZone = (iso: string, timeZone: string) => {
 const DEFAULT_TIMEZONE = "Asia/Tokyo";
 
 const notificationModeOptions = [
-	{ value: "normal", label: "Normal" },
+	{ value: "full_log", label: "Full Log" },
 	{ value: "summary", label: "Summary" },
 	{ value: "music_only", label: "Music Only" },
 ] as const;
@@ -342,7 +341,7 @@ const ScheduleControls = () => {
 					</div>
 					{settings ? (
 						<div className="space-y-4 text-sm text-text">
-							<div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
 								<div className="flex items-center justify-between gap-2 bg-muted/20 rounded-md p-3 border border-border">
 									<span>Notify Only Updates</span>
 									<Toggle
@@ -371,25 +370,6 @@ const ScheduleControls = () => {
 										className="cursor-pointer"
 									/>
 								</div>
-								<div className="flex items-center justify-between gap-2 bg-muted/20 rounded-md p-3 border border-border">
-									<div className="flex flex-col">
-										<span>Include Output Log</span>
-										<span className="text-xs text-muted">
-											Summary mode also depends on this.
-										</span>
-									</div>
-									<Toggle
-										checked={settings.includeLog}
-										onChange={(checked) => {
-											const next = {
-												...settings,
-												includeLog: checked,
-											};
-											void handleSaveSettings(next);
-										}}
-										className="cursor-pointer"
-									/>
-								</div>
 							</div>
 
 							<div className="border border-border rounded-lg overflow-hidden">
@@ -411,8 +391,8 @@ const ScheduleControls = () => {
 													{webhook.mode === "music_only"
 														? 'Receives only "New song is added!" file notifications.'
 														: webhook.mode === "summary"
-															? "Uses log summary instead of full output log."
-															: "Receives regular start, completion, and failure notifications."}
+															? "Receives regular notifications with log summary."
+															: "Receives regular notifications with full output log."}
 												</div>
 											</div>
 											<select
@@ -449,13 +429,6 @@ const ScheduleControls = () => {
 									</div>
 								)}
 							</div>
-
-							{!settings.includeLog && (
-								<div className="text-xs text-muted">
-									Summary mode keeps its assignment, but no log section is sent
-									until Include Output Log is enabled.
-								</div>
-							)}
 						</div>
 					) : (
 						<div className="text-sm text-muted">Loading settings...</div>
