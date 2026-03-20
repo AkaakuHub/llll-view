@@ -938,10 +938,7 @@ export class SometoolService {
 		if (!job?.outputLog) return;
 		if (!job.scheduleId) return;
 
-		const soundOnlyWebhookIds = this.getWebhookIdsByMode(
-			webhooks,
-			"music_only",
-		);
+		const targetWebhookIds = webhooks.map((webhook) => webhook.id);
 		const soundAssetKeys = extractSoundAssetKeys(job.outputLog);
 		if (soundAssetKeys.length === 0) return;
 
@@ -1005,7 +1002,7 @@ export class SometoolService {
 		if (convertedTracks.length === 0) return;
 
 		const trackNames = convertedTracks.map((track) => track.name);
-		if (soundOnlyWebhookIds.length === 0) {
+		if (targetWebhookIds.length === 0) {
 			return;
 		}
 
@@ -1013,12 +1010,12 @@ export class SometoolService {
 		const sendResult = await this.notificationService.sendMessageWithFiles(
 			attachmentPayload,
 			convertedTracks.map((track) => track.filePath),
-			soundOnlyWebhookIds,
+			targetWebhookIds,
 		);
 		if (sendResult.payloadTooLarge) {
 			await this.notificationService.sendMessage(
 				this.buildConvertedSoundNamesOnlyPayload(trackNames),
-				soundOnlyWebhookIds,
+				targetWebhookIds,
 			);
 		}
 	}
