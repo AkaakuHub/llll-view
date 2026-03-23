@@ -957,7 +957,11 @@ export class SometoolService {
 		});
 		if (targets.length === 0) return;
 
-		const convertedTracks: Array<{ name: string; filePath: string }> = [];
+		const convertedTracks: Array<{
+			name: string;
+			filePath: string;
+			thumbnailPath: string | null;
+		}> = [];
 		for (const target of targets) {
 			const result = await this.audioConverterService.convertAcbToWav(
 				target.id,
@@ -971,6 +975,7 @@ export class SometoolService {
 				select: {
 					status: true,
 					outputPath: true,
+					thumbnailPath: true,
 					displayName: true,
 					title: true,
 					filename: true,
@@ -990,6 +995,9 @@ export class SometoolService {
 			if (!resolvedOutputPath || !fs.existsSync(resolvedOutputPath)) {
 				continue;
 			}
+			const resolvedThumbnailPath = convertedFile.thumbnailPath
+				? this.resolveOutputPath(convertedFile.thumbnailPath)
+				: null;
 
 			convertedTracks.push({
 				name:
@@ -997,6 +1005,10 @@ export class SometoolService {
 					convertedFile.title ||
 					convertedFile.filename,
 				filePath: resolvedOutputPath,
+				thumbnailPath:
+					resolvedThumbnailPath && fs.existsSync(resolvedThumbnailPath)
+						? resolvedThumbnailPath
+						: null,
 			});
 		}
 		if (convertedTracks.length === 0) return;
@@ -1009,7 +1021,11 @@ export class SometoolService {
 		const attachmentPayload = this.buildConvertedSoundPayload(trackNames);
 		const sendResult = await this.notificationService.sendMessageWithFiles(
 			attachmentPayload,
-			convertedTracks.map((track) => track.filePath),
+			convertedTracks.flatMap((track) =>
+				track.thumbnailPath
+					? [track.filePath, track.thumbnailPath]
+					: [track.filePath],
+			),
 			targetWebhookIds,
 		);
 		if (sendResult.payloadTooLarge) {

@@ -196,12 +196,30 @@ export class SometoolNotificationService {
 			const fileName = path.basename(filePath);
 			form.append(
 				`files[${i}]`,
-				new Blob([bytes], { type: "audio/mp4" }),
+				new Blob([bytes], { type: this.getMimeType(filePath) }),
 				fileName,
 			);
 		}
 
 		return form;
+	}
+
+	private getMimeType(filePath: string): string {
+		const extension = path.extname(filePath).toLowerCase();
+		switch (extension) {
+			case ".m4a":
+			case ".mp4":
+				return "audio/mp4";
+			case ".webp":
+				return "image/webp";
+			case ".png":
+				return "image/png";
+			case ".jpg":
+			case ".jpeg":
+				return "image/jpeg";
+			default:
+				return "application/octet-stream";
+		}
 	}
 
 	private chunkMessage(content: string): string[] {
