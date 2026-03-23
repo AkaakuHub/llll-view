@@ -938,10 +938,7 @@ export class SometoolService {
 		if (!job?.outputLog) return;
 		if (!job.scheduleId) return;
 
-		const soundOnlyWebhookIds = this.getWebhookIdsByMode(
-			webhooks,
-			"music_only",
-		);
+		const targetWebhookIds = webhooks.map((webhook) => webhook.id);
 		const soundAssetKeys = extractSoundAssetKeys(job.outputLog);
 		if (soundAssetKeys.length === 0) return;
 
@@ -960,7 +957,11 @@ export class SometoolService {
 		});
 		if (targets.length === 0) return;
 
-		const convertedTracks: Array<{ name: string; filePath: string }> = [];
+		const convertedTracks: Array<{
+			name: string;
+			filePath: string;
+			thumbnailPath: string | null;
+		}> = [];
 		for (const target of targets) {
 			const result = await this.audioConverterService.convertAcbToWav(
 				target.id,
@@ -974,6 +975,7 @@ export class SometoolService {
 				select: {
 					status: true,
 					outputPath: true,
+					thumbnailPath: true,
 					displayName: true,
 					title: true,
 					filename: true,
@@ -993,6 +995,9 @@ export class SometoolService {
 			if (!resolvedOutputPath || !fs.existsSync(resolvedOutputPath)) {
 				continue;
 			}
+			const resolvedThumbnailPath = convertedFile.thumbnailPath
+				? this.resolveOutputPath(convertedFile.thumbnailPath)
+				: null;
 
 			convertedTracks.push({
 				name:
@@ -1000,25 +1005,33 @@ export class SometoolService {
 					convertedFile.title ||
 					convertedFile.filename,
 				filePath: resolvedOutputPath,
+				thumbnailPath:
+					resolvedThumbnailPath && fs.existsSync(resolvedThumbnailPath)
+						? resolvedThumbnailPath
+						: null,
 			});
 		}
 		if (convertedTracks.length === 0) return;
 
 		const trackNames = convertedTracks.map((track) => track.name);
-		if (soundOnlyWebhookIds.length === 0) {
+		if (targetWebhookIds.length === 0) {
 			return;
 		}
 
 		const attachmentPayload = this.buildConvertedSoundPayload(trackNames);
 		const sendResult = await this.notificationService.sendMessageWithFiles(
 			attachmentPayload,
-			convertedTracks.map((track) => track.filePath),
-			soundOnlyWebhookIds,
+			convertedTracks.flatMap((track) =>
+				track.thumbnailPath
+					? [track.filePath, track.thumbnailPath]
+					: [track.filePath],
+			),
+			targetWebhookIds,
 		);
 		if (sendResult.payloadTooLarge) {
 			await this.notificationService.sendMessage(
 				this.buildConvertedSoundNamesOnlyPayload(trackNames),
-				soundOnlyWebhookIds,
+				targetWebhookIds,
 			);
 		}
 	}
