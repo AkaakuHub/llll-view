@@ -1,4 +1,5 @@
 node_modules
+*.pem
 
 CLAUDE.md
 todo.txt
